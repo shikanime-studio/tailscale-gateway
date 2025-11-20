@@ -8,12 +8,15 @@ import (
 	"github.com/infinity-blackhole/tailscale-gateway/internal/controller/tailscaleconfig"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	applyappsv1 "k8s.io/client-go/applyconfigurations/apps/v1"
+	applycorev1 "k8s.io/client-go/applyconfigurations/core/v1"
+	applymetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
+	applyrbacv1 "k8s.io/client-go/applyconfigurations/rbac/v1"
 	"k8s.io/client-go/kubernetes"
-	ctrl "sigs.k8s.io/controller-runtime"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gateway "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 )
@@ -23,6 +26,7 @@ type Client struct {
 	Kube    kubernetes.Interface
 	Gateway gateway.Interface
 	Scheme  *runtime.Scheme
+	Cfg     *Config
 }
 
 // NewClient constructs a Client from kube and gateway clientsets.
@@ -30,46 +34,142 @@ func NewClient(
 	kube kubernetes.Interface,
 	gw gateway.Interface,
 	scheme *runtime.Scheme,
+	cfg *Config,
 ) *Client {
-	return &Client{Kube: kube, Gateway: gw, Scheme: scheme}
+	return &Client{Kube: kube, Gateway: gw, Scheme: scheme, Cfg: cfg}
 }
 
-// GetProxy returns the proxy DaemonSet associated with a Gateway, if present.
-func (c *Client) GetProxy(
+// EnsureDaemonSet constructs and ensures the proxy DaemonSet exists and is current.
+func (c *Client) EnsureDaemonSet(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
+	advertiseCmd []string,
+	drainCmd []string,
 ) (*appsv1.DaemonSet, error) {
 	name := fmt.Sprintf("%s-tailscale-gateway", gateway.Name)
-	return c.Kube.AppsV1().DaemonSets(gateway.Namespace).Get(ctx, name, metav1.GetOptions{})
-}
+	labels := map[string]string{"app": "tailscale-gateway", "gateway": gateway.Name}
 
-// ApplyProxy creates or updates the proxy DaemonSet and sets controller owner.
-func (c *Client) ApplyProxy(
-	ctx context.Context,
-	gateway *gatewayv1.Gateway,
-	ds *appsv1.DaemonSet,
-) error {
-	if err := ctrl.SetControllerReference(gateway, ds, c.Scheme); err != nil {
-		return err
-	}
-	var existing *appsv1.DaemonSet
-	existing, err := c.Kube.AppsV1().
-		DaemonSets(ds.Namespace).
-		Get(ctx, ds.Name, metav1.GetOptions{})
+	owner := applymetav1.OwnerReference().
+		WithAPIVersion("gateway.networking.k8s.io/v1").
+		WithKind("Gateway").
+		WithName(gateway.Name).
+		WithUID(gateway.UID)
+
+	dsApply := applyappsv1.DaemonSet(name, gateway.Namespace).
+		WithLabels(labels).
+		WithOwnerReferences(owner).
+		WithSpec(
+			applyappsv1.DaemonSetSpec().
+				WithSelector(applymetav1.LabelSelector().WithMatchLabels(labels)).
+				WithTemplate(
+					applycorev1.PodTemplateSpec().
+						WithLabels(labels).
+						WithSpec(
+							applycorev1.PodSpec().
+								WithServiceAccountName(c.ServiceAccountName(gateway)).
+								WithContainers(
+									applycorev1.Container().
+										WithName("tailscale").
+										WithImage(c.Cfg.GetTailscaleImage()).
+										WithEnv(
+											applycorev1.EnvVar().
+												WithName("TS_USERSPACE").
+												WithValue("true"),
+											applycorev1.EnvVar().
+												WithName("NODE_NAME").
+												WithValueFrom(
+													applycorev1.EnvVarSource().WithFieldRef(
+														applycorev1.ObjectFieldSelector().
+															WithFieldPath("spec.nodeName"),
+													),
+												),
+											applycorev1.EnvVar().
+												WithName("TS_HOSTNAME").
+												WithValue("$(NODE_NAME)"),
+											applycorev1.EnvVar().
+												WithName("TS_KUBE_SECRET").
+												WithValue(gateway.Name),
+											applycorev1.EnvVar().
+												WithName("TS_DEBUG_FIREWALL_MODE").
+												WithValue("auto"),
+											applycorev1.EnvVar().
+												WithName("TS_SERVE_CONFIG").
+												WithValue("/etc/tailscaled/services.hujson"),
+											applycorev1.EnvVar().WithName("POD_NAME").WithValueFrom(
+												applycorev1.EnvVarSource().WithFieldRef(
+													applycorev1.ObjectFieldSelector().
+														WithFieldPath("metadata.name"),
+												),
+											),
+											applycorev1.EnvVar().WithName("POD_UID").WithValueFrom(
+												applycorev1.EnvVarSource().WithFieldRef(
+													applycorev1.ObjectFieldSelector().
+														WithFieldPath("metadata.uid"),
+												),
+											),
+											applycorev1.EnvVar().WithName("POD_IP").WithValueFrom(
+												applycorev1.EnvVarSource().WithFieldRef(
+													applycorev1.ObjectFieldSelector().
+														WithFieldPath("status.podIP"),
+												),
+											),
+										).
+										WithSecurityContext(
+											applycorev1.SecurityContext().WithCapabilities(
+												applycorev1.Capabilities().
+													WithAdd(corev1.Capability("NET_ADMIN")),
+											),
+										).
+										WithLifecycle(
+											applycorev1.Lifecycle().
+												WithPostStart(applycorev1.LifecycleHandler().WithExec(applycorev1.ExecAction().WithCommand(advertiseCmd...))).
+												WithPreStop(applycorev1.LifecycleHandler().WithExec(applycorev1.ExecAction().WithCommand(drainCmd...))),
+										).
+										WithVolumeMounts(
+											applycorev1.VolumeMount().
+												WithName("tailscale").
+												WithMountPath("/etc/tailscaled/services.hujson").
+												WithSubPath("services.hujson"),
+										),
+									applycorev1.Container().
+										WithName("caddy").
+										WithImage(c.Cfg.GetProxyImage()).
+										WithCommand("caddy").
+										WithArgs("run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile").
+										WithVolumeMounts(
+											applycorev1.VolumeMount().
+												WithName("caddy-config").
+												WithMountPath("/etc/caddy/Caddyfile").
+												WithSubPath("Caddyfile"),
+										),
+								).
+								WithVolumes(
+									applycorev1.Volume().
+										WithName("tailscale").
+										WithConfigMap(
+											applycorev1.ConfigMapVolumeSource().
+												WithName(gateway.Name).
+												WithItems(applycorev1.KeyToPath().WithKey("services.hujson").WithPath("services.hujson")),
+										),
+									applycorev1.Volume().
+										WithName("caddy-config").
+										WithConfigMap(
+											applycorev1.ConfigMapVolumeSource().
+												WithName(caddyconfig.ConfigMapName(gateway)).
+												WithItems(applycorev1.KeyToPath().WithKey("Caddyfile").WithPath("Caddyfile")),
+										),
+								),
+						),
+				),
+		)
+
+	applied, err := c.Kube.AppsV1().
+		DaemonSets(gateway.Namespace).
+		Apply(ctx, dsApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			_, cerr := c.Kube.AppsV1().
-				DaemonSets(ds.Namespace).
-				Create(ctx, ds, metav1.CreateOptions{})
-			return cerr
-		}
-		return err
+		return nil, err
 	}
-	ds.ResourceVersion = existing.ResourceVersion
-	if _, uerr := c.Kube.AppsV1().DaemonSets(ds.Namespace).Update(ctx, ds, metav1.UpdateOptions{}); uerr != nil {
-		return uerr
-	}
-	return nil
+	return applied, nil
 }
 
 // ServiceAccountName returns the ServiceAccount name used for the Gateway.
@@ -77,152 +177,92 @@ func (c *Client) ServiceAccountName(gateway *gatewayv1.Gateway) string {
 	return fmt.Sprintf("%s-tailscale-gateway", gateway.Name)
 }
 
-// BuildProxyDaemonSet constructs the DaemonSet running Tailscale and Caddy.
-func (c *Client) BuildProxyDaemonSet(
+// GetHTTPRoutesForGateway gets all HTTPRoutes that reference this Gateway
+func (c *Client) GetHTTPRoutesForGateway(
+	ctx context.Context,
 	gateway *gatewayv1.Gateway,
-	advertiseCmd []string,
-	drainCmd []string,
-	proxyImage string,
-	image string,
-) *appsv1.DaemonSet {
-	name := fmt.Sprintf("%s-tailscale-gateway", gateway.Name)
-	ns := gateway.Namespace
-	cmName := fmt.Sprintf("%s-services", gateway.Name)
-
-	labels := map[string]string{"app": "tailscale-gateway", "gateway": gateway.Name}
-
-	return &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Labels: labels},
-		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: labels},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: labels},
-				Spec: corev1.PodSpec{
-					ServiceAccountName: c.ServiceAccountName(gateway),
-					Containers: []corev1.Container{
-						{
-							Name:  "tailscale",
-							Image: image,
-							Env: []corev1.EnvVar{
-								{Name: "TS_USERSPACE", Value: "true"},
-								{
-									Name: "NODE_NAME",
-									ValueFrom: &corev1.EnvVarSource{
-										FieldRef: &corev1.ObjectFieldSelector{
-											FieldPath: "spec.nodeName",
-										},
-									},
-								},
-								{
-									Name:  "TS_HOSTNAME",
-									Value: "$(NODE_NAME)",
-								},
-								{Name: "TS_KUBE_SECRET", Value: gateway.Name},
-								{Name: "TS_DEBUG_FIREWALL_MODE", Value: "auto"},
-								{
-									Name:  "TS_SERVE_CONFIG",
-									Value: "/etc/tailscaled/services.hujson",
-								},
-								{
-									Name: "POD_NAME",
-									ValueFrom: &corev1.EnvVarSource{
-										FieldRef: &corev1.ObjectFieldSelector{
-											FieldPath: "metadata.name",
-										},
-									},
-								},
-								{
-									Name: "POD_UID",
-									ValueFrom: &corev1.EnvVarSource{
-										FieldRef: &corev1.ObjectFieldSelector{
-											FieldPath: "metadata.uid",
-										},
-									},
-								},
-								{
-									Name: "POD_IP",
-									ValueFrom: &corev1.EnvVarSource{
-										FieldRef: &corev1.ObjectFieldSelector{
-											FieldPath: "status.podIP",
-										},
-									},
-								},
-							},
-							SecurityContext: &corev1.SecurityContext{
-								Capabilities: &corev1.Capabilities{
-									Add: []corev1.Capability{"NET_ADMIN"},
-								},
-							},
-							Lifecycle: &corev1.Lifecycle{
-								PostStart: &corev1.LifecycleHandler{
-									Exec: &corev1.ExecAction{
-										Command: advertiseCmd,
-									},
-								},
-								PreStop: &corev1.LifecycleHandler{
-									Exec: &corev1.ExecAction{
-										Command: drainCmd,
-									},
-								},
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "tailscale-services",
-									MountPath: "/etc/tailscaled/services.hujson",
-									SubPath:   "services.hujson",
-								},
-							},
-						},
-						{
-							Name:    "caddy",
-							Image:   proxyImage,
-							Command: []string{"caddy"},
-							Args: []string{
-								"run",
-								"--config",
-								"/etc/caddy/Caddyfile",
-								"--adapter",
-								"caddyfile",
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "caddy-config",
-									MountPath: "/etc/caddy/Caddyfile",
-									SubPath:   "Caddyfile",
-								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "tailscale-services",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{Name: cmName},
-									Items: []corev1.KeyToPath{
-										{Key: "services.hujson", Path: "services.hujson"},
-									},
-								},
-							},
-						},
-						{
-							Name: "caddy-config",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: caddyconfig.ConfigMapName(gateway),
-									},
-									Items: []corev1.KeyToPath{
-										{Key: "Caddyfile", Path: "Caddyfile"},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
+) ([]gatewayv1.HTTPRoute, error) {
+	routesList, err := c.Gateway.GatewayV1().
+		HTTPRoutes(metav1.NamespaceAll).
+		List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list HTTPRoutes: %w", err)
 	}
+
+	var matching []gatewayv1.HTTPRoute
+	for _, route := range routesList.Items {
+		for _, parentRef := range route.Spec.ParentRefs {
+			if parentRef.Name == gatewayv1.ObjectName(gateway.Name) {
+				if route.Namespace == gateway.Namespace ||
+					(parentRef.Namespace != nil && *parentRef.Namespace == gatewayv1.Namespace(gateway.Namespace)) {
+					matching = append(matching, route)
+					break
+				}
+			}
+		}
+	}
+	return matching, nil
+}
+
+// Ensure manages the Tailscale proxy servers for the Gateway
+func (c *Client) Ensure(
+	ctx context.Context,
+	gateway *gatewayv1.Gateway,
+) error {
+	logger := log.FromContext(ctx)
+
+	routes, err := c.GetHTTPRoutesForGateway(ctx, gateway)
+	if err != nil {
+		return err
+	}
+
+	tsCfg, err := tailscaleconfig.NewConfig(
+		gateway,
+		tailscaleconfig.WithHTTPRoutes(routes),
+	)
+	if err != nil {
+		return err
+	}
+	advertiseCmd, err := tailscaleconfig.AdvertiseServicesCommand(tsCfg)
+	if err != nil {
+		return err
+	}
+	drainCmd, err := tailscaleconfig.DrainServicesCommand(tsCfg)
+	if err != nil {
+		return err
+	}
+	ds, err := c.EnsureDaemonSet(
+		ctx,
+		gateway,
+		advertiseCmd,
+		drainCmd,
+	)
+	if err != nil {
+		return err
+	}
+
+	caddyCfg, err := caddyconfig.NewConfig(
+		gateway,
+		caddyconfig.WithHTTPRoutes(routes),
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := c.EnsureRBAC(ctx, gateway, c.ServiceAccountName(gateway)); err != nil {
+		return err
+	}
+	if err := c.EnsureSecret(ctx, gateway, gateway.Name); err != nil {
+		return err
+	}
+	if err := c.UpdateConfig(ctx, gateway, gateway.Name, ds.ObjectMeta.Labels, tsCfg); err != nil {
+		return err
+	}
+	if err := c.UpdateCaddyConfig(ctx, gateway, caddyconfig.ConfigMapName(gateway), ds.ObjectMeta.Labels, caddyCfg); err != nil {
+		return err
+	}
+	logger.Info("daemon set ensured", "gateway", gateway.Name)
+	return nil
 }
 
 // EnsureServiceAccount creates the ServiceAccount if it does not exist.
@@ -231,26 +271,23 @@ func (c *Client) EnsureServiceAccount(
 	gateway *gatewayv1.Gateway,
 	saName string,
 ) error {
-	if _, getErr := c.Kube.CoreV1().ServiceAccounts(gateway.Namespace).Get(ctx, saName, metav1.GetOptions{}); getErr != nil {
-		if apierrors.IsNotFound(getErr) {
-			sa := &corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{Name: saName, Namespace: gateway.Namespace},
-			}
-			if setErr := ctrl.SetControllerReference(gateway, sa, c.Scheme); setErr != nil {
-				return setErr
-			}
-			if _, createErr := c.Kube.CoreV1().ServiceAccounts(gateway.Namespace).Create(ctx, sa, metav1.CreateOptions{}); createErr != nil {
-				return createErr
-			}
-		} else {
-			return getErr
-		}
-	}
-	return nil
+	owner := applymetav1.OwnerReference().
+		WithAPIVersion("gateway.networking.k8s.io/v1").
+		WithKind("Gateway").
+		WithName(gateway.Name).
+		WithUID(gateway.UID)
+
+	saApply := applycorev1.ServiceAccount(saName, gateway.Namespace).
+		WithOwnerReferences(owner)
+
+	_, err := c.Kube.CoreV1().
+		ServiceAccounts(gateway.Namespace).
+		Apply(ctx, saApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
+	return err
 }
 
-// EnsureProxyRBAC ensures a ClusterRoleBinding grants the ServiceAccount access.
-func (c *Client) EnsureProxyRBAC(
+// EnsureRBAC ensures a ClusterRoleBinding grants the ServiceAccount access.
+func (c *Client) EnsureRBAC(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	saName string,
@@ -258,88 +295,51 @@ func (c *Client) EnsureProxyRBAC(
 	if saErr := c.EnsureServiceAccount(ctx, gateway, saName); saErr != nil {
 		return saErr
 	}
-
 	crbName := fmt.Sprintf("%s-%s", saName, gateway.Namespace)
-	crb := &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: crbName},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     "tailscale-gateway-proxy",
-		},
-		Subjects: []rbacv1.Subject{
-			{Kind: "ServiceAccount", Name: saName, Namespace: gateway.Namespace},
-		},
-	}
-	if _, getErr := c.Kube.RbacV1().ClusterRoleBindings().Get(ctx, crbName, metav1.GetOptions{}); getErr != nil {
-		if apierrors.IsNotFound(getErr) {
-			if _, createErr := c.Kube.RbacV1().ClusterRoleBindings().Create(ctx, crb, metav1.CreateOptions{}); createErr != nil {
-				return createErr
-			}
-		} else {
-			return getErr
-		}
-	}
-	return nil
+
+	owner := applymetav1.OwnerReference().
+		WithAPIVersion("gateway.networking.k8s.io/v1").
+		WithKind("Gateway").
+		WithName(gateway.Name).
+		WithUID(gateway.UID)
+
+	crbApply := applyrbacv1.ClusterRoleBinding(crbName).
+		WithOwnerReferences(owner).
+		WithRoleRef(applyrbacv1.RoleRef().WithAPIGroup("rbac.authorization.k8s.io").WithKind("ClusterRole").WithName("tailscale-gateway-proxy")).
+		WithSubjects(applyrbacv1.Subject().WithKind("ServiceAccount").WithName(saName).WithNamespace(gateway.Namespace))
+
+	_, err := c.Kube.RbacV1().
+		ClusterRoleBindings().
+		Apply(ctx, crbApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
+	return err
 }
 
-// EnsureProxySecret ensures the Secret with optional auth key exists and is current.
-func (c *Client) EnsureProxySecret(
+// EnsureSecret ensures the Secret with optional auth key exists and is current.
+func (c *Client) EnsureSecret(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	secretName string,
-	cfg *Config,
 ) error {
-	sec, getErr := c.Kube.CoreV1().
-		Secrets(gateway.Namespace).
-		Get(ctx, secretName, metav1.GetOptions{})
-	if getErr != nil {
-		if apierrors.IsNotFound(getErr) {
-			sec = &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: gateway.Namespace},
-				Type:       corev1.SecretTypeOpaque,
-			}
-			if v := cfg.GetTSAuthKey(); v != "" {
-				sec.StringData = map[string]string{"authkey": v}
-			}
-			if setErr := ctrl.SetControllerReference(gateway, sec, c.Scheme); setErr != nil {
-				return setErr
-			}
-			if _, createErr := c.Kube.CoreV1().Secrets(gateway.Namespace).Create(ctx, sec, metav1.CreateOptions{}); createErr != nil {
-				return createErr
-			}
-		} else {
-			return getErr
-		}
-	} else {
-		changed := false
-		if sec.Data != nil {
-			if v, ok := sec.Data["auth-key"]; ok {
-				if sec.StringData == nil {
-					sec.StringData = map[string]string{}
-				}
-				sec.StringData["authkey"] = string(v)
-				delete(sec.Data, "auth-key")
-				changed = true
-			}
-		}
-		if v := cfg.GetTSAuthKey(); v != "" {
-			if sec.StringData == nil {
-				sec.StringData = map[string]string{}
-			}
-			sec.StringData["authkey"] = v
-			changed = true
-		}
-		if changed {
-			if setErr := ctrl.SetControllerReference(gateway, sec, c.Scheme); setErr != nil {
-				return setErr
-			}
-			if _, updateErr := c.Kube.CoreV1().Secrets(gateway.Namespace).Update(ctx, sec, metav1.UpdateOptions{}); updateErr != nil {
-				return updateErr
-			}
-		}
+	owner := applymetav1.OwnerReference().
+		WithAPIVersion("gateway.networking.k8s.io/v1").
+		WithKind("Gateway").
+		WithName(gateway.Name).
+		WithUID(gateway.UID)
+
+	stringData := map[string]string{}
+	if v := c.Cfg.GetTSAuthKey(); v != "" {
+		stringData["authkey"] = v
 	}
-	return nil
+
+	secApply := applycorev1.Secret(secretName, gateway.Namespace).
+		WithType(corev1.SecretTypeOpaque).
+		WithStringData(stringData).
+		WithOwnerReferences(owner)
+
+	_, err := c.Kube.CoreV1().
+		Secrets(gateway.Namespace).
+		Apply(ctx, secApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
+	return err
 }
 
 // UpdateCaddyConfig ensures the proxy Caddy JSON ConfigMap exists and is up to date.
@@ -355,43 +355,26 @@ func (c *Client) UpdateCaddyConfig(
 		return merr
 	}
 	caddyfile := string(b)
-	cm, getErr := c.Kube.CoreV1().
+
+	owner := applymetav1.OwnerReference().
+		WithAPIVersion("gateway.networking.k8s.io/v1").
+		WithKind("Gateway").
+		WithName(gateway.Name).
+		WithUID(gateway.UID)
+
+	cmApply := applycorev1.ConfigMap(cmName, gateway.Namespace).
+		WithLabels(labels).
+		WithData(map[string]string{"Caddyfile": caddyfile}).
+		WithOwnerReferences(owner)
+
+	_, err := c.Kube.CoreV1().
 		ConfigMaps(gateway.Namespace).
-		Get(ctx, cmName, metav1.GetOptions{})
-	if getErr != nil {
-		if apierrors.IsNotFound(getErr) {
-			cm = &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cmName,
-					Namespace: gateway.Namespace,
-					Labels:    labels,
-				},
-				Data: map[string]string{"Caddyfile": caddyfile},
-			}
-			if setErr := ctrl.SetControllerReference(gateway, cm, c.Scheme); setErr != nil {
-				return setErr
-			}
-			_, createErr := c.Kube.CoreV1().
-				ConfigMaps(gateway.Namespace).
-				Create(ctx, cm, metav1.CreateOptions{})
-			return createErr
-		}
-		return getErr
-	}
-	if cm.Data == nil || cm.Data["Caddyfile"] != caddyfile {
-		cm.Data = map[string]string{"Caddyfile": caddyfile}
-		if setErr := ctrl.SetControllerReference(gateway, cm, c.Scheme); setErr != nil {
-			return setErr
-		}
-		if _, updateErr := c.Kube.CoreV1().ConfigMaps(gateway.Namespace).Update(ctx, cm, metav1.UpdateOptions{}); updateErr != nil {
-			return updateErr
-		}
-	}
-	return nil
+		Apply(ctx, cmApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
+	return err
 }
 
-// UpdateServicesConfig ensures the services ConfigMap exists and is up to date.
-func (c *Client) UpdateServicesConfig(
+// UpdateConfig ensures the services ConfigMap exists and is up to date.
+func (c *Client) UpdateConfig(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	cmName string,
@@ -403,37 +386,20 @@ func (c *Client) UpdateServicesConfig(
 		return merr
 	}
 	servicesConfig := string(b)
-	cm, getErr := c.Kube.CoreV1().
+
+	owner := applymetav1.OwnerReference().
+		WithAPIVersion("gateway.networking.k8s.io/v1").
+		WithKind("Gateway").
+		WithName(gateway.Name).
+		WithUID(gateway.UID)
+
+	cmApply := applycorev1.ConfigMap(cmName, gateway.Namespace).
+		WithLabels(labels).
+		WithData(map[string]string{"services.hujson": servicesConfig}).
+		WithOwnerReferences(owner)
+
+	_, err := c.Kube.CoreV1().
 		ConfigMaps(gateway.Namespace).
-		Get(ctx, cmName, metav1.GetOptions{})
-	if getErr != nil {
-		if apierrors.IsNotFound(getErr) {
-			cm = &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cmName,
-					Namespace: gateway.Namespace,
-					Labels:    labels,
-				},
-				Data: map[string]string{"services.hujson": servicesConfig},
-			}
-			if setErr := ctrl.SetControllerReference(gateway, cm, c.Scheme); setErr != nil {
-				return setErr
-			}
-			_, createErr := c.Kube.CoreV1().
-				ConfigMaps(gateway.Namespace).
-				Create(ctx, cm, metav1.CreateOptions{})
-			return createErr
-		}
-		return getErr
-	}
-	if cm.Data == nil || cm.Data["services.hujson"] != servicesConfig {
-		cm.Data = map[string]string{"services.hujson": servicesConfig}
-		if setErr := ctrl.SetControllerReference(gateway, cm, c.Scheme); setErr != nil {
-			return setErr
-		}
-		if _, updateErr := c.Kube.CoreV1().ConfigMaps(gateway.Namespace).Update(ctx, cm, metav1.UpdateOptions{}); updateErr != nil {
-			return updateErr
-		}
-	}
-	return nil
+		Apply(ctx, cmApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
+	return err
 }

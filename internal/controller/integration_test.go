@@ -62,9 +62,9 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 	kubeClient := kfake.NewSimpleClientset()
 
 	cfg := New()
-	r := NewGatewayReconciler(kubeClient, gwClient, s, cfg)
+	client := NewClient(kubeClient, gwClient, s, cfg)
 
-	if err := r.ensureProxyDeployment(context.Background(), gw); err != nil {
+	if err := client.Ensure(context.Background(), gw); err != nil {
 		t.Fatalf("ensureProxyDeployment error: %v", err)
 	}
 
@@ -80,7 +80,7 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 
 	cm, err := kubeClient.CoreV1().
 		ConfigMaps(gw.Namespace).
-		Get(context.Background(), fmt.Sprintf("%s-services", gw.Name), metav1.GetOptions{})
+		Get(context.Background(), gw.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("configmap not found: %v", err)
 	}

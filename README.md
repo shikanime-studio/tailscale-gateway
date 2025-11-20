@@ -99,8 +99,8 @@ kubectl apply -k manifests/demo
 ### What gets created
 
 - DaemonSet `<gateway>-tailscale-gateway` in the Gateway namespace
-- ConfigMap `<gateway>-services` containing `services.hujson`
-- ConfigMap `<gateway>-caddy` containing `Caddyfile`
+- ConfigMap `<gateway>` containing `services.hujson`
+- ConfigMap `<gateway>-caddy-config` containing `Caddyfile`
 - Secret `<gateway>` in the Gateway namespace with key `authkey` (populated if `TS_AUTHKEY` is set)
 
 ## Observability
@@ -122,7 +122,7 @@ kubectl -n <ns> get gateway <name> -o yaml
 kubectl -n <ns> get ds,pods -l app=tailscale-gateway
 
 # Configs
-kubectl -n <ns> get cm <name>-caddy <name>-services -o yaml
+kubectl -n <ns> get cm <name>-caddy-config <name> -o yaml
 ```
 
 ## Development

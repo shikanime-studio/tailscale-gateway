@@ -17,12 +17,12 @@ func New() *Config {
 	v.SetDefault("metrics_bind_address", ":8080")
 	v.SetDefault("health_probe_bind_address", ":8081")
 	v.SetDefault("proxy_image", "caddy:latest")
-	v.SetDefault("tailscale_image", "tailscale/tailscale:latest")
+	v.SetDefault("ts_image", "tailscale/tailscale:latest")
 
 	v.BindEnv("metrics_bind_address", "METRICS_BIND_ADDRESS")
 	v.BindEnv("health_probe_bind_address", "HEALTH_PROBE_BIND_ADDRESS")
 	v.BindEnv("proxy_image", "PROXY_IMAGE")
-	v.BindEnv("tailscale_image", "TS_IMAGE")
+	v.BindEnv("ts_image", "TS_IMAGE")
 	v.BindEnv("ts_auth_key", "TS_AUTHKEY", "ts_auth_key")
 
 	return &Config{v: v}
@@ -43,4 +43,4 @@ func (c *Config) GetTSAuthKey() string { return c.v.GetString("ts_auth_key") }
 func (c *Config) GetProxyImage() string { return c.v.GetString("proxy_image") }
 
 // GetTailscaleImage returns the tailscale daemon container image.
-func (c *Config) GetTailscaleImage() string { return c.v.GetString("tailscale_image") }
+func (c *Config) GetTailscaleImage() string { return c.v.GetString("ts_image") }

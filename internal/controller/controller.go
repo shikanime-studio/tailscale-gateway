@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/infinity-blackhole/tailscale-gateway/internal/controller/caddyconfig"
-	"github.com/infinity-blackhole/tailscale-gateway/internal/controller/tailscaleconfig"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -83,9 +81,9 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil // Don't retry validation errors immediately
 	}
 
-	// Build backend list from HTTPRoutes
-	// Ensure Deployment with proxy + tailscale sidecar configured via Tailscale Services
-	if err := r.ensureProxyDeployment(ctx, gateway); err != nil {
+	// Build backend list from HTTPRoutes and ensure proxy deployment via client helper
+	client := NewClient(r.Kube, r.Gateway, r.Scheme, r.Cfg)
+	if err := client.Ensure(ctx, gateway); err != nil {
 		log.Error(err, "Failed to manage proxy servers")
 		if err = r.updateGatewayStatus(ctx, gateway, false, ConditionReasonNotReady, err.Error()); err != nil {
 			log.Error(err, "Failed to update Gateway status")
@@ -127,97 +125,7 @@ func (r *GatewayReconciler) validateListeners(gateway *gatewayv1.Gateway) error 
 	return nil
 }
 
-// getHTTPRoutesForGateway gets all HTTPRoutes that reference this Gateway
-func (r *GatewayReconciler) getHTTPRoutesForGateway(
-	ctx context.Context,
-	gateway *gatewayv1.Gateway,
-) ([]gatewayv1.HTTPRoute, error) {
-	routesList, err := r.Gateway.GatewayV1().
-		HTTPRoutes(metav1.NamespaceAll).
-		List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list HTTPRoutes: %w", err)
-	}
-
-	var matching []gatewayv1.HTTPRoute
-	for _, route := range routesList.Items {
-		for _, parentRef := range route.Spec.ParentRefs {
-			if parentRef.Name == gatewayv1.ObjectName(gateway.Name) {
-				if route.Namespace == gateway.Namespace ||
-					(parentRef.Namespace != nil && *parentRef.Namespace == gatewayv1.Namespace(gateway.Namespace)) {
-					matching = append(matching, route)
-					break
-				}
-			}
-		}
-	}
-	return matching, nil
-}
-
-// manageProxyServers manages the Tailscale proxy servers for the Gateway
-func (r *GatewayReconciler) ensureProxyDeployment(
-	ctx context.Context,
-	gateway *gatewayv1.Gateway,
-) error {
-	client := NewClient(r.Kube, r.Gateway, r.Scheme)
-	saName := client.ServiceAccountName(gateway)
-	cmName := fmt.Sprintf("%s-services", gateway.Name)
-	secretName := gateway.Name
-	proxyCMName := caddyconfig.ConfigMapName(gateway)
-
-	routes, err := r.getHTTPRoutesForGateway(ctx, gateway)
-	if err != nil {
-		return err
-	}
-
-	tsCfg, err := tailscaleconfig.NewConfig(
-		gateway,
-		tailscaleconfig.WithHTTPRoutes(routes),
-	)
-	if err != nil {
-		return err
-	}
-	advertiseCmd, err := tailscaleconfig.AdvertiseServicesCommand(tsCfg)
-	if err != nil {
-		return err
-	}
-	drainCmd, err := tailscaleconfig.DrainServicesCommand(tsCfg)
-	if err != nil {
-		return err
-	}
-	ds := client.BuildProxyDaemonSet(
-		gateway,
-		advertiseCmd,
-		drainCmd,
-		r.Cfg.GetProxyImage(),
-		r.Cfg.GetTailscaleImage(),
-	)
-
-	caddyCfg, err := caddyconfig.NewConfig(
-		gateway,
-		caddyconfig.WithHTTPRoutes(routes),
-	)
-	if err != nil {
-		return err
-	}
-
-	if err := client.EnsureProxyRBAC(ctx, gateway, saName); err != nil {
-		return err
-	}
-	if err := client.EnsureProxySecret(ctx, gateway, secretName, r.Cfg); err != nil {
-		return err
-	}
-	if err := client.ApplyProxy(ctx, gateway, ds); err != nil {
-		return err
-	}
-	if err := client.UpdateServicesConfig(ctx, gateway, cmName, ds.ObjectMeta.Labels, tsCfg); err != nil {
-		return err
-	}
-	if err := client.UpdateCaddyConfig(ctx, gateway, proxyCMName, ds.ObjectMeta.Labels, caddyCfg); err != nil {
-		return err
-	}
-	return nil
-}
+// removed: ensureProxyDeployment and getHTTPRoutesForGateway moved to client helpers
 
 // updateGatewayStatus updates the Gateway status conditions
 func (r *GatewayReconciler) updateGatewayStatus(
