@@ -117,7 +117,7 @@ func (c *Client) BuildProxyDaemonSet(
 								{Name: "TS_DEBUG_FIREWALL_MODE", Value: "auto"},
 								{
 									Name:  "TS_SERVE_CONFIG",
-									Value: "/etc/tailscaled/services.hujson/services.hujson",
+									Value: "/etc/tailscaled/services.hujson",
 								},
 								{
 									Name: "POD_NAME",

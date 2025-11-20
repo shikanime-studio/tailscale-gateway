@@ -89,16 +89,11 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 		t.Fatalf("serve-config missing")
 	}
 
-	type generic struct {
-		Services map[string]struct {
-			TCP map[string]map[string]bool `json:"TCP"`
-			Web map[string]struct {
-				Handlers map[string]struct {
-					Proxy string `json:"Proxy"`
-				} `json:"Handlers"`
-			} `json:"Web"`
-		} `json:"Services"`
-	}
+    type generic struct {
+        Services map[string]struct {
+            Endpoints map[string]string `json:"endpoints"`
+        } `json:"services"`
+    }
 	var parsed generic
 	if err := json.Unmarshal([]byte(data), &parsed); err != nil {
 		t.Fatalf("failed to parse serve-config: %v", err)
@@ -107,18 +102,7 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 	if !ok {
 		t.Fatalf("service key not found: svc:%s", gw.Name)
 	}
-	if !svc.TCP["80"]["HTTP"] {
-		t.Fatalf("expected TCP 80 HTTP true")
-	}
-	// Ensure at least one web handler proxies to localhost:80
-	found := false
-	for _, w := range svc.Web {
-		if h, ok := w.Handlers["/"]; ok && h.Proxy == "http://127.0.0.1:80" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected Proxy http://127.0.0.1:80 in handlers")
-	}
+    if got := svc.Endpoints["tcp:80"]; got != "http://127.0.0.1:80" {
+        t.Fatalf("unexpected endpoint: got %s, want %s", got, "http://127.0.0.1:80")
+    }
 }
