@@ -111,7 +111,7 @@ func (c *Client) BuildProxyDaemonSet(
 								},
 								{
 									Name:  "TS_HOSTNAME",
-									Value: fmt.Sprintf("$(NODE_NAME)-%s", gateway.Name),
+									Value: "$(NODE_NAME)",
 								},
 								{Name: "TS_KUBE_SECRET", Value: gateway.Name},
 								{Name: "TS_DEBUG_FIREWALL_MODE", Value: "auto"},
