@@ -78,7 +78,9 @@ func (c *Client) ServiceAccountName(gateway *gatewayv1.Gateway) string {
 
 func (c *Client) BuildProxyDaemonSet(
 	gateway *gatewayv1.Gateway,
-	cfg *Config,
+	advertiseCmd []string,
+	drainCmd []string,
+	proxyImage string,
 	image string,
 ) *appsv1.DaemonSet {
 	name := fmt.Sprintf("tailscale-gateway-%s", gateway.Name)
@@ -117,7 +119,7 @@ func (c *Client) BuildProxyDaemonSet(
 								{Name: "TS_DEBUG_FIREWALL_MODE", Value: "auto"},
 								{
 									Name:  "TS_SERVE_CONFIG",
-									Value: "/etc/tailscaled/services.hujson/services.hujson",
+									Value: "/etc/tailscaled/services.hujson",
 								},
 								{
 									Name: "POD_NAME",
@@ -149,16 +151,29 @@ func (c *Client) BuildProxyDaemonSet(
 									Add: []corev1.Capability{"NET_ADMIN"},
 								},
 							},
+							Lifecycle: &corev1.Lifecycle{
+								PostStart: &corev1.LifecycleHandler{
+									Exec: &corev1.ExecAction{
+										Command: advertiseCmd,
+									},
+								},
+								PreStop: &corev1.LifecycleHandler{
+									Exec: &corev1.ExecAction{
+										Command: drainCmd,
+									},
+								},
+							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "tailscale-services",
 									MountPath: "/etc/tailscaled/services.hujson",
+									SubPath:   "services.hujson",
 								},
 							},
 						},
 						{
 							Name:    "caddy",
-							Image:   cfg.GetProxyImage(),
+							Image:   proxyImage,
 							Command: []string{"caddy"},
 							Args: []string{
 								"run",

@@ -161,7 +161,6 @@ func (r *GatewayReconciler) ensureProxyDeployment(
 ) error {
 	client := NewClient(r.Kube, r.Gateway, r.Scheme)
 	saName := client.ServiceAccountName(gateway)
-	ds := client.BuildProxyDaemonSet(gateway, r.Cfg, r.Cfg.GetTailscaleImage())
 	cmName := fmt.Sprintf("tailscale-services-%s", gateway.Name)
 	secretName := gateway.Name
 	proxyCMName := caddyconfig.ConfigMapName(gateway)
@@ -174,11 +173,25 @@ func (r *GatewayReconciler) ensureProxyDeployment(
 	tsCfg, err := tailscaleconfig.NewConfig(
 		gateway,
 		tailscaleconfig.WithHTTPRoutes(routes),
-		tailscaleconfig.WithHost(r.Cfg.GetTailscaleCertDomain()),
 	)
 	if err != nil {
 		return err
 	}
+	advertiseCmd, err := tailscaleconfig.AdvertiseServicesCommand(tsCfg)
+	if err != nil {
+		return err
+	}
+	drainCmd, err := tailscaleconfig.DrainServicesCommand(tsCfg)
+	if err != nil {
+		return err
+	}
+	ds := client.BuildProxyDaemonSet(
+		gateway,
+		advertiseCmd,
+		drainCmd,
+		r.Cfg.GetProxyImage(),
+		r.Cfg.GetTailscaleImage(),
+	)
 
 	caddyCfg, err := caddyconfig.NewConfig(
 		gateway,

@@ -2,6 +2,7 @@ package tailscaleconfig
 
 import (
 	"fmt"
+	"strings"
 
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"tailscale.com/ipn"
@@ -130,4 +131,28 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 
 func newServeConfig() *Config {
 	return &Config{cfg: &ipn.ServeConfig{Services: map[tailcfg.ServiceName]*ipn.ServiceConfig{}}}
+}
+
+func AdvertiseServicesCommand(cfg *Config) ([]string, error) {
+	var svcs []string
+	for svcName := range cfg.cfg.Services {
+		svcs = append(svcs, string(svcName))
+	}
+	cmds := make([]string, len(svcs))
+	for i, svc := range svcs {
+		cmds[i] = fmt.Sprintf("tailscale serve advertise %s", svc)
+	}
+	return []string{"/bin/sh", "-c", strings.Join(cmds, "\n")}, nil
+}
+
+func DrainServicesCommand(cfg *Config) ([]string, error) {
+	var svcs []string
+	for svcName := range cfg.cfg.Services {
+		svcs = append(svcs, string(svcName))
+	}
+	cmds := make([]string, len(svcs))
+	for i, svc := range svcs {
+		cmds[i] = fmt.Sprintf("tailscale serve drain %s || true", svc)
+	}
+	return []string{"/bin/sh", "-c", strings.Join(cmds, "\n")}, nil
 }
