@@ -15,6 +15,7 @@ var caddyfileTmpl = template.Must(template.New("Caddyfile").Parse(
 {{ end }}`,
 ))
 
+// Marshal renders the Config into a Caddyfile and returns its bytes.
 func Marshal(cfg *Config) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := caddyfileTmpl.Execute(&buf, cfg); err != nil {

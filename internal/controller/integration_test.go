@@ -70,7 +70,7 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 
 	dep, err := kubeClient.AppsV1().
 		DaemonSets(gw.Namespace).
-		Get(context.Background(), fmt.Sprintf("tailscale-gateway-%s", gw.Name), metav1.GetOptions{})
+		Get(context.Background(), fmt.Sprintf("%s-tailscale-gateway", gw.Name), metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("deployment not found: %v", err)
 	}
@@ -80,11 +80,11 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 
 	cm, err := kubeClient.CoreV1().
 		ConfigMaps(gw.Namespace).
-		Get(context.Background(), fmt.Sprintf("tailscale-services-%s", gw.Name), metav1.GetOptions{})
+		Get(context.Background(), fmt.Sprintf("%s-services", gw.Name), metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("configmap not found: %v", err)
 	}
-	data := cm.Data["serve-config"]
+	data := cm.Data["services.hujson"]
 	if data == "" {
 		t.Fatalf("serve-config missing")
 	}

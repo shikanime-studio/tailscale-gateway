@@ -161,7 +161,7 @@ func (r *GatewayReconciler) ensureProxyDeployment(
 ) error {
 	client := NewClient(r.Kube, r.Gateway, r.Scheme)
 	saName := client.ServiceAccountName(gateway)
-	cmName := fmt.Sprintf("tailscale-services-%s", gateway.Name)
+	cmName := fmt.Sprintf("%s-services", gateway.Name)
 	secretName := gateway.Name
 	proxyCMName := caddyconfig.ConfigMapName(gateway)
 
@@ -244,7 +244,6 @@ func (r *GatewayReconciler) updateGatewayStatus(
 
 	meta.SetStatusCondition(&gateway.Status.Conditions, condition)
 
-	// Update listeners status using non-deprecated conditions
 	var listenerStatuses []gatewayv1.ListenerStatus
 	for _, listener := range gateway.Spec.Listeners {
 		listenerStatus := gatewayv1.ListenerStatus{

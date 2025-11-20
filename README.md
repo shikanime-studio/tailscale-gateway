@@ -1,324 +1,140 @@
 # Tailscale Gateway API Controller
 
-A Kubernetes controller that implements the Gateway API for Tailscale integration, providing secure ingress capabilities through Tailscale's mesh network.
+Kubernetes controller that integrates the Gateway API with Tailscale. For each `Gateway`, it provisions a per-node proxy DaemonSet that bridges Tailscale Serve to cluster `Service`s discovered from `HTTPRoute`s.
 
 ## Overview
 
-This controller manages Gateway API resources and creates Tailscale proxy servers to route traffic from the Tailscale network to Kubernetes services. It supports:
-
-- **Gateway API Compliance**: Full implementation of Gateway API v1 specifications
-- **HTTPRoute Integration**: Automatic discovery and routing of HTTPRoutes
-- **Load Balancing**: Round-robin load balancing across multiple backend services
-- **Health Checking**: Automatic health monitoring of backend services
-- **Status Updates**: Comprehensive status reporting and condition management
-- **High Availability**: Support for multiple replicas and failover capabilities
+- Reconciles `Gateway` resources and discovers referenced `HTTPRoute`s
+- Generates Tailscale Serve HUJSON config and a Caddy reverse_proxy config
+- Applies `ConfigMap`s and a DaemonSet with `tailscale` + `caddy` containers
+- Updates `Gateway` status and listener conditions; publishes a hostname address
 
 ## Features
 
-### Core Functionality
+- Gateway API v1: HTTP/HTTPS listeners
+- HTTPRoute backend discovery across namespaces via `parentRefs`
+- Reverse proxy to `service.namespace:port` endpoints via Caddy
+- Simple round‑robin balancing across multiple backends
+- Status conditions for Gateway and Listeners; hostname `ns-name.ts.net` when ready
 
-- ✅ Gateway API v1 support
-- ✅ HTTPRoute parent reference handling
-- ✅ Multi-backend load balancing
-- ✅ Health-based backend selection
-- ✅ Automatic status updates
-- ✅ Comprehensive error handling
-
-### Advanced Features
-
-- 🔒 Secure Tailscale integration
-- 📊 Health monitoring and failover
-- 🔄 Dynamic backend updates
-- 📝 Detailed logging and observability
-- 🚀 High-performance proxy implementation
-
-## Architecture
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Gateway API   │────▶│  Tailscale       │────▶│   Kubernetes    │
-│   Controller    │     │  Proxy Server    │     │   Services      │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Gateway       │     │   Health         │     │   HTTPRoute     │
-│   Status        │◀────│   Checker        │◀────│   Discovery     │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-```
-
-## Installation
+## Install
 
 ### Prerequisites
 
-- Kubernetes cluster (v1.19+)
+- A Kubernetes cluster and `kubectl`
+- Gateway API CRDs (`v1.0.0`)
 - Tailscale account and auth key
-- Gateway API CRDs installed
-- kubectl configured
 
-### Quick Start
-
-1. **Install Gateway API CRDs**:
+### Option A: Kustomize
 
 ```bash
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
+kubectl apply -k manifests/gateway/base
+
+# Create controller auth key Secret in tailscale-system
+kubectl -n tailscale-system create secret generic tailscale-gateway-controller \
+  --from-literal=authkey=tskey-xxxxxxxxxxxxxxxx
 ```
 
-2. **Create GatewayClass**:
-
-```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: GatewayClass
-metadata:
-  name: tailscale
-spec:
-  controllerName: tailscale.io/gateway-controller
-```
-
-3. **Deploy the Controller**:
+### Option B: Skaffold (ko)
 
 ```bash
-# Build and deploy the controller
-make deploy TS_AUTHKEY=your-tailscale-auth-key
+# Requires ko and skaffold
+skaffold dev -p demo
 ```
+
+The demo profile builds the controller image with ko and deploys `manifests/gateway/overlays/demo`, which sets `TS_CERT_BASE_DOMAIN` for generated hostnames.
 
 ## Configuration
 
-### Gateway Configuration
+Environment variables consumed by the controller:
 
-Create a Gateway resource to expose your services:
+- `METRICS_BIND_ADDRESS` (default `:8080`)
+- `HEALTH_PROBE_BIND_ADDRESS` (default `:8081`)
+- `PROXY_IMAGE` (default `caddy:latest`)
+- `TAILSCALE_IMAGE` (default `tailscale/tailscale:latest`)
+- `TS_AUTHKEY` (optional; controller reads and writes `authkey` in Secret)
+- `TS_CERT_BASE_DOMAIN` (optional; suffix appended to generated hostnames)
+
+## Usage
+
+### Define Gateway and HTTPRoute
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: example-gateway
-  namespace: default
+  name: demo
+  namespace: tailscale-gateway-demo
 spec:
   gatewayClassName: tailscale
   listeners:
     - name: http
       protocol: HTTP
       port: 80
-```
-
-### HTTPRoute Configuration
-
-Create HTTPRoutes to define routing rules:
-
-```yaml
+    - name: https
+      protocol: HTTPS
+      port: 443
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: example-route
-  namespace: default
+  name: demo
+  namespace: tailscale-gateway-demo
 spec:
   parentRefs:
-    - name: example-gateway
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: example-service
-          port: 80
-```
-
-### Annotations
-
-Use annotations for additional configuration:
-
-```yaml
-metadata:
-  annotations:
-    tailscale.com/backend: "http://fallback-service:8080" # Fallback backend
-    tailscale.com/ephemeral: "true" # Ephemeral node
-    tailscale.com/tags: "tag:k8s,tag:prod" # Tailscale tags
-```
-
-## Usage
-
-### Basic Example
-
-1. **Create a sample application**:
-
-```bash
-kubectl apply -f examples/sample-app.yaml
-```
-
-2. **Create Gateway and HTTPRoute**:
-
-```bash
-kubectl apply -f examples/gateway.yaml
-kubectl apply -f examples/httproute.yaml
-```
-
-3. **Verify deployment**:
-
-```bash
-kubectl get gateway example-gateway -o yaml
-kubectl get httproute example-route -o yaml
-```
-
-### Advanced Configuration
-
-#### Multiple Backends
-
-The controller automatically discovers multiple backends from HTTPRoutes and implements round-robin load balancing:
-
-```yaml
-spec:
+    - name: demo
+  hostnames:
+    - demo
   rules:
     - backendRefs:
-        - name: service-v1
+        - name: demo
           port: 80
-          weight: 90
-        - name: service-v2
-          port: 80
-          weight: 10
 ```
 
-#### Health Checking
-
-Backends are automatically health-checked every 30 seconds. Unhealthy backends are removed from the rotation until they recover.
-
-#### Status Monitoring
-
-Monitor Gateway status:
+Apply the demo app and routes:
 
 ```bash
-kubectl describe gateway example-gateway
+kubectl apply -k manifests/demo
 ```
 
-Example output:
+### What gets created
 
-```
-Status:
-  Addresses:
-    Type:   Hostname
-    Value:  default-example-gateway.ts.net
-  Conditions:
-    Last Transition Time:  2024-01-01T00:00:00Z
-    Message:               Gateway is ready
-    Reason:                Ready
-    Status:                True
-    Type:                  Ready
-  Listeners:
-    Conditions:
-      Last Transition Time:  2024-01-01T00:00:00Z
-      Message:               Listener is ready
-      Reason:                Ready
-      Status:                True
-      Type:                  Ready
-    Name:                    http
+- DaemonSet `<gateway>-tailscale-gateway` in the Gateway namespace
+- ConfigMap `<gateway>-services` containing `services.hujson`
+- ConfigMap `<gateway>-caddy-config` containing `Caddyfile`
+- Secret `<gateway>` in the Gateway namespace with key `authkey` (populated if `TS_AUTHKEY` is set)
+
+## Observability
+
+- Metrics: `:8080/metrics` (Service `tailscale-gateway-controller-metrics`)
+- Health/Ready: `:8081` HTTP probes
+- Logging: zap in dev mode
+
+## Troubleshooting
+
+```bash
+# Controller logs
+kubectl -n tailscale-system logs deploy/tailscale-gateway-controller
+
+# Gateway and Listener conditions
+kubectl -n <ns> get gateway <name> -o yaml
+
+# DaemonSet and pods
+kubectl -n <ns> get ds,pods -l app=tailscale-gateway
+
+# Configs
+kubectl -n <ns> get cm <name>-caddy-config <name>-services -o yaml
 ```
 
 ## Development
 
-### Building
-
 ```bash
-make build
+# Build binary
+go build ./cmd/controller
+
+# Run tests
+go test ./...
+
+# Build and deploy demo with ko + skaffold
+skaffold dev -p demo
 ```
-
-### Testing
-
-```bash
-make test
-```
-
-### Running Locally
-
-```bash
-# Run with local Kubernetes config
-make run TS_AUTHKEY=your-auth-key
-```
-
-## Monitoring
-
-### Metrics
-
-The controller exposes Prometheus metrics on `:8080/metrics`:
-
-- `gateway_reconcile_total`: Total number of Gateway reconciliations
-- `gateway_reconcile_errors_total`: Number of reconciliation errors
-- `gateway_ready_status`: Current ready status of Gateways
-- `backend_health_status`: Health status of backend services
-
-### Logging
-
-Configure log level with the `--zap-log-level` flag:
-
-```bash
---zap-log-level=debug
-```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Gateway not becoming ready**:
-   - Check HTTPRoute parent references
-   - Verify backend services are healthy
-   - Check controller logs for errors
-
-2. **Tailscale connection issues**:
-   - Verify auth key is valid
-   - Check Tailscale network connectivity
-   - Review Tailscale node status
-
-3. **Backend routing problems**:
-   - Verify service names and ports
-   - Check health check endpoints
-   - Review proxy server logs
-
-### Debug Commands
-
-```bash
-# Check controller logs
-kubectl logs -n tailscale-system deployment/gateway-controller
-
-# Check Gateway status
-kubectl get gateway -o yaml
-
-# Check HTTPRoute status
-kubectl get httproute -o yaml
-
-# Test connectivity
-kubectl run debug --image=curlimages/curl --rm -it -- curl http://your-service
-```
-
-## API Reference
-
-### Gateway Conditions
-
-| Condition   | Description                                |
-| ----------- | ------------------------------------------ |
-| `Ready`     | Gateway is configured and operational      |
-| `Scheduled` | Gateway has been scheduled to a controller |
-
-### Listener Conditions
-
-| Condition      | Description                       |
-| -------------- | --------------------------------- |
-| `Ready`        | Listener is configured and ready  |
-| `ResolvedRefs` | All references have been resolved |
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- 📧 Email: support@tailscale.com
-- 💬 Slack: [#tailscale-gateway](https://tailscale.slack.com)
-- 🐛 Issues: [GitHub Issues](https://github.com/infinity-blackhole/tailscale-gateway-api/issues)
