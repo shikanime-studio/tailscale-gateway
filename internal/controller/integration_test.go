@@ -90,11 +90,14 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 	}
 
 	type generic struct {
-		Version  string `json:"version"`
 		Services map[string]struct {
-			Endpoints  map[string]string `json:"endpoints"`
-			Advertised bool              `json:"advertised"`
-		} `json:"services"`
+			TCP map[string]map[string]bool `json:"TCP"`
+			Web map[string]struct {
+				Handlers map[string]struct {
+					Proxy string `json:"Proxy"`
+				} `json:"Handlers"`
+			} `json:"Web"`
+		} `json:"Services"`
 	}
 	var parsed generic
 	if err := json.Unmarshal([]byte(data), &parsed); err != nil {
@@ -104,8 +107,18 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 	if !ok {
 		t.Fatalf("service key not found: svc:%s", gw.Name)
 	}
-	want := "http://127.0.0.1:80"
-	if got := svc.Endpoints["tcp:80"]; got != want {
-		t.Fatalf("unexpected endpoint: got %s, want %s", got, want)
+	if !svc.TCP["80"]["HTTP"] {
+		t.Fatalf("expected TCP 80 HTTP true")
+	}
+	// Ensure at least one web handler proxies to localhost:80
+	found := false
+	for _, w := range svc.Web {
+		if h, ok := w.Handlers["/"]; ok && h.Proxy == "http://127.0.0.1:80" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected Proxy http://127.0.0.1:80 in handlers")
 	}
 }

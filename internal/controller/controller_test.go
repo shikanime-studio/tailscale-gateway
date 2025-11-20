@@ -335,8 +335,11 @@ func TestServicesApplyBuildsTargets(t *testing.T) {
 	}
 	type generic struct {
 		Services map[string]struct {
-			Endpoints map[string]string `json:"endpoints"`
-		} `json:"services"`
+			TCP map[string]map[string]bool `json:"TCP"`
+			Web map[string]map[string]struct {
+				Proxy string `json:"Proxy"`
+			} `json:"Web"`
+		} `json:"Services"`
 	}
 	var parsed generic
 	if err := json.Unmarshal(outBytes, &parsed); err != nil {
@@ -346,8 +349,8 @@ func TestServicesApplyBuildsTargets(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected service key svc:test-gateway")
 	}
-	if len(svc.Endpoints) != 1 {
-		t.Fatalf("expected 1 endpoint, got %d", len(svc.Endpoints))
+	if !svc.TCP["80"]["HTTP"] {
+		t.Fatalf("expected TCP 80 HTTP true")
 	}
 }
 

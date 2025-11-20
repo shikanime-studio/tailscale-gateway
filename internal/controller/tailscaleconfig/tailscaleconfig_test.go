@@ -10,9 +10,7 @@ import (
 
 func TestMarshal_WithRouteOptions(t *testing.T) {
 	gw := &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-gw",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-gw"},
 		Spec: gatewayv1.GatewaySpec{
 			Listeners: []gatewayv1.Listener{
 				{Name: "http", Protocol: gatewayv1.HTTPProtocolType, Port: 80},
@@ -25,21 +23,17 @@ func TestMarshal_WithRouteOptions(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 		Spec: gatewayv1.HTTPRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
-				ParentRefs: []gatewayv1.ParentReference{{
-					Name: gatewayv1.ObjectName(gw.Name),
-				}},
+				ParentRefs: []gatewayv1.ParentReference{{Name: gatewayv1.ObjectName(gw.Name)}},
 			},
 			Rules: []gatewayv1.HTTPRouteRule{{
-				BackendRefs: []gatewayv1.HTTPBackendRef{
-					{
-						BackendRef: gatewayv1.BackendRef{
-							BackendObjectReference: gatewayv1.BackendObjectReference{
-								Name: "svc",
-								Port: ptrTo(gatewayv1.PortNumber(8080)),
-							},
+				BackendRefs: []gatewayv1.HTTPBackendRef{{
+					BackendRef: gatewayv1.BackendRef{
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Name: "svc",
+							Port: ptrTo(gatewayv1.PortNumber(8080)),
 						},
 					},
-				},
+				}},
 			}},
 		},
 	}
@@ -51,14 +45,16 @@ func TestMarshal_WithRouteOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
 	}
-	t.Log(string(outBytes))
 
 	type generic struct {
-		Version  string `json:"version"`
 		Services map[string]struct {
-			Endpoints  map[string]string `json:"endpoints"`
-			Advertised bool              `json:"advertised"`
-		} `json:"services"`
+			TCP map[string]map[string]bool `json:"TCP"`
+			Web map[string]struct {
+				Handlers map[string]struct {
+					Proxy string `json:"Proxy"`
+				} `json:"Handlers"`
+			} `json:"Web"`
+		} `json:"Services"`
 	}
 	var parsed generic
 	if err := json.Unmarshal(outBytes, &parsed); err != nil {
@@ -69,13 +65,27 @@ func TestMarshal_WithRouteOptions(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected service key svc:test-gw")
 	}
-	if got := svc.Endpoints["tcp:80"]; got != "http://127.0.0.1:80" {
-		t.Fatalf("expected default http:80 target, got %s", got)
+	if !svc.TCP["80"]["HTTP"] {
+		t.Fatalf("expected TCP 80 HTTP true")
 	}
-	if got := svc.Endpoints["tcp:8081"]; got != "http://127.0.0.1:8081" {
-		t.Fatalf("expected http:8081 target override, got %s", got)
+	if !svc.TCP["8081"]["HTTP"] {
+		t.Fatalf("expected TCP 8081 HTTP true")
+	}
+
+	// Web entries exist and proxy to localhost:80
+	if len(svc.Web) == 0 {
+		t.Fatalf("expected Web entries")
+	}
+	found := false
+	for _, w := range svc.Web {
+		if h, ok := w.Handlers["/"]; ok && h.Proxy == "http://127.0.0.1:80" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected Proxy http://127.0.0.1:80 in handlers")
 	}
 }
 
-// Helper function to create pointers
 func ptrTo[T any](v T) *T { return &v }

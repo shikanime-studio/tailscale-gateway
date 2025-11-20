@@ -89,12 +89,24 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 				continue
 			}
 
-			addr := fmt.Sprintf("127.0.0.1:%d", l.Port)
-			if _, ok := sites[addr]; !ok {
-				sites[addr] = map[string]struct{}{}
-			}
-			for _, u := range upstreams {
-				sites[addr][u] = struct{}{}
+			if len(hr.Spec.Hostnames) == 0 {
+				addr := fmt.Sprintf(":%d", l.Port)
+				if _, ok := sites[addr]; !ok {
+					sites[addr] = map[string]struct{}{}
+				}
+				for _, u := range upstreams {
+					sites[addr][u] = struct{}{}
+				}
+			} else {
+				for _, h := range hr.Spec.Hostnames {
+					addr := fmt.Sprintf("%s:%d", h, l.Port)
+					if _, ok := sites[addr]; !ok {
+						sites[addr] = map[string]struct{}{}
+					}
+					for _, u := range upstreams {
+						sites[addr][u] = struct{}{}
+					}
+				}
 			}
 		}
 	}
