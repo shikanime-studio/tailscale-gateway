@@ -116,17 +116,6 @@ func (c *Client) BuildProxyDaemonSet(
 								{Name: "TS_KUBE_SECRET", Value: gateway.Name},
 								{Name: "TS_DEBUG_FIREWALL_MODE", Value: "auto"},
 								{
-									Name: "TS_AUTHKEY",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: gateway.Name,
-											},
-											Key: "authkey",
-										},
-									},
-								},
-								{
 									Name:  "TS_SERVE_CONFIG",
 									Value: "/var/lib/tailscale/services/services.hujson",
 								},
