@@ -6,7 +6,7 @@ metadata:
   namespace: tailscale-gateway-demo
 spec:
   parentRefs:
-    - name: tailscale-gateway-demo
+    - name: demo
   hostnames:
     - demo
   rules:

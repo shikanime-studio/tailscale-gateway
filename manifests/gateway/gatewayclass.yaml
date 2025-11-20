@@ -5,4 +5,3 @@ metadata:
   name: tailscale
 spec:
   controllerName: tailscale.io/gateway-controller
-  description: "Tailscale Gateway Controller"
