@@ -100,25 +100,48 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 			}
 
 			if len(hr.Spec.Hostnames) == 0 {
-				addr := fmt.Sprintf(":%d", l.Port)
-				if _, ok := sites[addr]; !ok {
-					sites[addr] = map[string]struct{}{}
+				baseAddr := fmt.Sprintf(":%d", l.Port)
+				if _, ok := sites[baseAddr]; !ok {
+					sites[baseAddr] = map[string]struct{}{}
 				}
 				for _, u := range upstreams {
-					sites[addr][u] = struct{}{}
+					sites[baseAddr][u] = struct{}{}
+				}
+
+				if o.Host != "" {
+					hostAddr := fmt.Sprintf(
+						"%s-%s.%s:%d",
+						gw.Namespace,
+						string(gw.Name),
+						o.Host,
+						l.Port,
+					)
+					if _, ok := sites[hostAddr]; !ok {
+						sites[hostAddr] = map[string]struct{}{}
+					}
+					for _, u := range upstreams {
+						sites[hostAddr][u] = struct{}{}
+					}
 				}
 			} else {
 				for _, h := range hr.Spec.Hostnames {
-					host := string(h)
-					if o.Host != "" {
-						host = fmt.Sprintf("%s.%s", host, o.Host)
-					}
-					addr := fmt.Sprintf("%s:%d", host, l.Port)
+					rawHost := string(h)
+					addr := fmt.Sprintf("%s:%d", rawHost, l.Port)
 					if _, ok := sites[addr]; !ok {
 						sites[addr] = map[string]struct{}{}
 					}
 					for _, u := range upstreams {
 						sites[addr][u] = struct{}{}
+					}
+
+					if o.Host != "" {
+						suffixed := fmt.Sprintf("%s.%s:%d", rawHost, o.Host, l.Port)
+						if _, ok := sites[suffixed]; !ok {
+							sites[suffixed] = map[string]struct{}{}
+						}
+						for _, u := range upstreams {
+							sites[suffixed][u] = struct{}{}
+						}
 					}
 				}
 			}

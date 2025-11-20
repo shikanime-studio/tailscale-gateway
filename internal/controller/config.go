@@ -18,12 +18,14 @@ func New() *Config {
 	v.SetDefault("health_probe_bind_address", ":8081")
 	v.SetDefault("proxy_image", "caddy:latest")
 	v.SetDefault("ts_image", "tailscale/tailscale:latest")
+	v.SetDefault("ts_cert_domain", "")
 
 	v.BindEnv("metrics_bind_address", "METRICS_BIND_ADDRESS")
 	v.BindEnv("health_probe_bind_address", "HEALTH_PROBE_BIND_ADDRESS")
 	v.BindEnv("proxy_image", "PROXY_IMAGE")
 	v.BindEnv("ts_image", "TS_IMAGE")
 	v.BindEnv("ts_auth_key", "TS_AUTHKEY", "ts_auth_key")
+	v.BindEnv("ts_cert_domain", "TS_CERT_DOMAIN", "ts_cert_domain")
 
 	return &Config{v: v}
 }
@@ -44,3 +46,6 @@ func (c *Config) GetProxyImage() string { return c.v.GetString("proxy_image") }
 
 // GetTailscaleImage returns the tailscale daemon container image.
 func (c *Config) GetTailscaleImage() string { return c.v.GetString("ts_image") }
+
+// GetCertDomain returns the optional DNS suffix to append for certificates.
+func (c *Config) GetCertDomain() string { return c.v.GetString("ts_cert_domain") }

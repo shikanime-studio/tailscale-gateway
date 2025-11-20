@@ -125,7 +125,6 @@ func (r *GatewayReconciler) validateListeners(gateway *gatewayv1.Gateway) error 
 	return nil
 }
 
-
 // updateGatewayStatus updates the Gateway status conditions
 func (r *GatewayReconciler) updateGatewayStatus(
 	ctx context.Context,
@@ -197,7 +196,7 @@ func (r *GatewayReconciler) updateGatewayStatus(
 
 	// Update addresses if ready
 	if ready {
-		hostname := fmt.Sprintf("%s-%s.ts.net", gateway.Namespace, gateway.Name)
+		hostname := fmt.Sprintf("%s-%s", gateway.Namespace, gateway.Name)
 		gateway.Status.Addresses = []gatewayv1.GatewayStatusAddress{
 			{
 				Type:  (*gatewayv1.AddressType)(&[]string{"Hostname"}[0]),

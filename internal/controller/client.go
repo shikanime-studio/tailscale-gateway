@@ -244,6 +244,7 @@ func (c *Client) Ensure(
 	caddyCfg, err := caddyconfig.NewConfig(
 		gateway,
 		caddyconfig.WithHTTPRoutes(routes),
+		caddyconfig.WithHost(c.Cfg.GetCertDomain()),
 	)
 	if err != nil {
 		return err
