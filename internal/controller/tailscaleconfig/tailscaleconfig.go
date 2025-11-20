@@ -6,9 +6,12 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	conffile "tailscale.com/ipn/conffile"
 	"tailscale.com/tailcfg"
+	"tailscale.com/types/opt"
 )
 
-type Config struct{ cfg *conffile.ServicesConfigFile }
+type Config struct {
+	cfg *conffile.ServicesConfigFile
+}
 
 func (c *Config) Marshal() ([]byte, error) {
 	return Marshal(c)
@@ -119,5 +122,8 @@ func newServices() *Config {
 }
 
 func newServiceDetails() *conffile.ServiceDetailsFile {
-	return &conffile.ServiceDetailsFile{Endpoints: map[*tailcfg.ProtoPortRange]*conffile.Target{}}
+	return &conffile.ServiceDetailsFile{
+		Endpoints:  map[*tailcfg.ProtoPortRange]*conffile.Target{},
+		Advertised: opt.True,
+	}
 }

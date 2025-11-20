@@ -153,6 +153,7 @@ func (c *Client) BuildProxyDaemonSet(
 								{
 									Name:      "tailscale-services",
 									MountPath: "/etc/tailscaled/services.hujson",
+									SubPath:   "services.hujson",
 								},
 							},
 						},
