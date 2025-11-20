@@ -171,7 +171,11 @@ func (r *GatewayReconciler) ensureProxyDeployment(
 		return err
 	}
 
-	tsCfg, err := tailscaleconfig.NewConfig(gateway, tailscaleconfig.WithHTTPRoutes(routes))
+	tsCfg, err := tailscaleconfig.NewConfig(
+		gateway,
+		tailscaleconfig.WithHTTPRoutes(routes),
+		tailscaleconfig.WithHost(r.Cfg.GetTailscaleCertDomain()),
+	)
 	if err != nil {
 		return err
 	}

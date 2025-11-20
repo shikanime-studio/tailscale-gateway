@@ -113,6 +113,7 @@ func (c *Client) BuildProxyDaemonSet(
 									Name:  "TS_HOSTNAME",
 									Value: fmt.Sprintf("$(NODE_NAME)-%s", gateway.Name),
 								},
+								{Name: "TS_INTERNAL_APP", Value: "gateway"},
 								{Name: "TS_KUBE_SECRET", Value: gateway.Name},
 								{Name: "TS_DEBUG_FIREWALL_MODE", Value: "auto"},
 								{
@@ -127,16 +128,16 @@ func (c *Client) BuildProxyDaemonSet(
 									},
 								},
 								{
-									Name:  "TS_SERVE_CONFIG",
-									Value: "/var/lib/tailscale/services/services.hujson",
-								},
-								{
 									Name: "POD_NAME",
 									ValueFrom: &corev1.EnvVarSource{
 										FieldRef: &corev1.ObjectFieldSelector{
 											FieldPath: "metadata.name",
 										},
 									},
+								},
+								{
+									Name:  "TS_SERVE_CONFIG",
+									Value: "/etc/tailscaled/serve-config",
 								},
 								{
 									Name: "POD_UID",
@@ -163,7 +164,7 @@ func (c *Client) BuildProxyDaemonSet(
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "tailscale-services",
-									MountPath: "/var/lib/tailscale/services",
+									MountPath: "/etc/tailscaled",
 								},
 								{
 									Name:      "net-tun",
@@ -198,7 +199,7 @@ func (c *Client) BuildProxyDaemonSet(
 								ConfigMap: &corev1.ConfigMapVolumeSource{
 									LocalObjectReference: corev1.LocalObjectReference{Name: cmName},
 									Items: []corev1.KeyToPath{
-										{Key: "services.hujson", Path: "services.hujson"},
+										{Key: "serve-config", Path: "serve-config"},
 									},
 								},
 							},
@@ -420,7 +421,7 @@ func (c *Client) UpdateServicesConfig(
 					Namespace: gateway.Namespace,
 					Labels:    labels,
 				},
-				Data: map[string]string{"services.hujson": servicesConfig},
+				Data: map[string]string{"serve-config": servicesConfig},
 			}
 			if setErr := ctrl.SetControllerReference(gateway, cm, c.Scheme); setErr != nil {
 				return setErr
@@ -432,8 +433,8 @@ func (c *Client) UpdateServicesConfig(
 		}
 		return getErr
 	}
-	if cm.Data == nil || cm.Data["services.hujson"] != servicesConfig {
-		cm.Data = map[string]string{"services.hujson": servicesConfig}
+	if cm.Data == nil || cm.Data["serve-config"] != servicesConfig {
+		cm.Data = map[string]string{"serve-config": servicesConfig}
 		if setErr := ctrl.SetControllerReference(gateway, cm, c.Scheme); setErr != nil {
 			return setErr
 		}

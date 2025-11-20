@@ -16,6 +16,7 @@ func (c *Config) Marshal() ([]byte, error) { return Marshal(c) }
 
 type serviceOptions struct {
 	HTTPRoutes []*gatewayv1.HTTPRoute
+	Host       string
 }
 
 type Option func(*serviceOptions)
@@ -38,6 +39,10 @@ func WithHTTPRoutes(hrs []gatewayv1.HTTPRoute) Option {
 			o.HTTPRoutes = append(o.HTTPRoutes, &hrs[i])
 		}
 	}
+}
+
+func WithHost(name string) Option {
+	return func(o *serviceOptions) { o.Host = name }
 }
 
 func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
@@ -80,7 +85,11 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 								continue
 							}
 							for _, h := range hr.Spec.Hostnames {
-								addr := ipn.HostPort(fmt.Sprintf("%s:%d", h, l.Port))
+								host := string(h)
+								if o.Host != "" {
+									host = fmt.Sprintf("%s.%s", host, o.Host)
+								}
+								addr := ipn.HostPort(fmt.Sprintf("%s:%d", host, l.Port))
 								if _, ok := cfg.cfg.Services[svcName].Web[addr]; !ok {
 									cfg.cfg.Services[svcName].Web[addr] = &ipn.WebServerConfig{
 										Handlers: map[string]*ipn.HTTPHandler{
