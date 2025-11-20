@@ -1,0 +1,87 @@
+package services
+
+import (
+	"encoding/json"
+	"testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+)
+
+func TestMarshal_WithRouteOptions(t *testing.T) {
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-gw",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{
+				{Name: "http", Protocol: gatewayv1.HTTPProtocolType, Port: 80},
+				{Name: "http-2", Protocol: gatewayv1.HTTPProtocolType, Port: 8081},
+			},
+		},
+	}
+
+	hrHTTP := &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: gatewayv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{
+				ParentRefs: []gatewayv1.ParentReference{{
+					Name: gatewayv1.ObjectName(gw.Name),
+				}},
+			},
+			Rules: []gatewayv1.HTTPRouteRule{{
+				BackendRefs: []gatewayv1.HTTPBackendRef{
+					{
+						BackendRef: gatewayv1.BackendRef{
+							BackendObjectReference: gatewayv1.BackendObjectReference{
+								Name: "svc",
+								Port: ptrTo(gatewayv1.PortNumber(8080)),
+							},
+						},
+					},
+				},
+			}},
+		},
+	}
+	cfg := NewServiceConfig()
+	svcName := ServiceName(gw.Name)
+	cfg.Services[svcName] = NewServiceDetails()
+	if err := Apply(
+		cfg,
+		WithGateway(gw),
+		WithHTTPRoute(hrHTTP),
+	); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	outBytes, err := Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	t.Log(string(outBytes))
+
+	type generic struct {
+		Version  string `json:"version"`
+		Services map[string]struct {
+			Endpoints  map[string]string `json:"endpoints"`
+			Advertised bool              `json:"advertised"`
+		} `json:"services"`
+	}
+	var parsed generic
+	if err := json.Unmarshal(outBytes, &parsed); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+
+	svc, ok := parsed.Services["svc:test-gw"]
+	if !ok {
+		t.Fatalf("expected service key svc:test-gw")
+	}
+	if got := svc.Endpoints["tcp:80"]; got != "http://svc.default.svc.cluster.local:8080" {
+		t.Fatalf("expected default http:80 target, got %s", got)
+	}
+	if got := svc.Endpoints["tcp:8081"]; got != "http://svc.default.svc.cluster.local:8080" {
+		t.Fatalf("expected http:8081 target override, got %s", got)
+	}
+}
+
+// Helper function to create pointers
+func ptrTo[T any](v T) *T { return &v }

@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale-gateway-controller
+  namespace: tailscale-system
+  labels:
+    app: tailscale-gateway-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tailscale-gateway-controller
+  template:
+    metadata:
+      labels:
+        app: tailscale-gateway-controller
+    spec:
+      serviceAccountName: tailscale-gateway-controller
+      containers:
+        - name: controller
+          image: ghcr.io/infinity-blackhole/tailscale-gateway/controller
+          env:
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: tailscale-auth
+                  key: auth-key

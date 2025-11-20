@@ -1,0 +1,21 @@
+# Example HTTPRoute for routing traffic through the Gateway
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: demo-route
+  namespace: tailscale-gateway-demo
+  labels:
+    app.kubernetes.io/name: demo-route
+    app.kubernetes.io/instance: demo
+    app.kubernetes.io/part-of: tailscale-gateway-demo
+    app.kubernetes.io/component: routing
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  parentRefs:
+    - name: tailscale-gateway-demo
+  hostnames:
+    - demo
+  rules:
+    - backendRefs:
+        - name: demo-app
+          port: 80

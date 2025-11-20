@@ -1,0 +1,26 @@
+apiVersion: skaffold/v4beta1
+kind: Config
+metadata:
+  name: tailscale-gateway
+build:
+  artifacts:
+    - image: ghcr.io/infinity-blackhole/tailscale-gateway/controller
+      ko:
+        dependencies:
+          paths:
+            - cmd/controller
+            - internal
+            - go.mod
+            - go.sum
+        dir: ./cmd/controller
+        fromImage: cgr.dev/chainguard/glibc-dynamic
+manifests:
+  kustomize:
+    paths:
+      - manifests
+profiles:
+  - name: telsha-telnet
+    manifests:
+      kustomize:
+        paths:
+          - manifests/canary

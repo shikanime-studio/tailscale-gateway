@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tailscale-gateway-controller-metrics
+  namespace: tailscale-system
+  labels:
+    app: tailscale-gateway-controller
+spec:
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app: tailscale-gateway-controller
