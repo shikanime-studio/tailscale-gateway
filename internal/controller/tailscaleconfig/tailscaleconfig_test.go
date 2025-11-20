@@ -1,8 +1,8 @@
 package tailscaleconfig
 
 import (
-    "encoding/json"
-    "testing"
+	"encoding/json"
+	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -46,27 +46,27 @@ func TestMarshal_WithRouteOptions(t *testing.T) {
 		t.Fatalf("marshal failed: %v", err)
 	}
 
-    type generic struct {
-        Version  string `json:"version"`
-        Services map[string]struct {
-            Endpoints map[string]string `json:"endpoints"`
-        } `json:"services"`
-    }
+	type generic struct {
+		Version  string `json:"version"`
+		Services map[string]struct {
+			Endpoints map[string]string `json:"endpoints"`
+		} `json:"services"`
+	}
 	var parsed generic
 	if err := json.Unmarshal(outBytes, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal output: %v", err)
 	}
 
-    svc, ok := parsed.Services["svc:test-gw"]
-    if !ok {
-        t.Fatalf("expected service key svc:test-gw")
-    }
-    if got := svc.Endpoints["tcp:80"]; got != "http://127.0.0.1:80" {
-        t.Fatalf("expected tcp:80 target, got %s", got)
-    }
-    if got := svc.Endpoints["tcp:8081"]; got != "http://127.0.0.1:8081" {
-        t.Fatalf("expected tcp:8081 target, got %s", got)
-    }
+	svc, ok := parsed.Services["svc:test-gw"]
+	if !ok {
+		t.Fatalf("expected service key svc:test-gw")
+	}
+	if got := svc.Endpoints["tcp:80"]; got != "http://127.0.0.1:80" {
+		t.Fatalf("expected tcp:80 target, got %s", got)
+	}
+	if got := svc.Endpoints["tcp:8081"]; got != "http://127.0.0.1:8081" {
+		t.Fatalf("expected tcp:8081 target, got %s", got)
+	}
 }
 
 func ptrTo[T any](v T) *T { return &v }

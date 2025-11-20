@@ -80,6 +80,7 @@ func (c *Client) BuildProxyDaemonSet(
 	gateway *gatewayv1.Gateway,
 	cfg *Config,
 	image string,
+	services []string,
 ) *appsv1.DaemonSet {
 	name := fmt.Sprintf("tailscale-gateway-%s", gateway.Name)
 	ns := gateway.Namespace
@@ -147,6 +148,20 @@ func (c *Client) BuildProxyDaemonSet(
 							SecurityContext: &corev1.SecurityContext{
 								Capabilities: &corev1.Capabilities{
 									Add: []corev1.Capability{"NET_ADMIN"},
+								},
+							},
+							Lifecycle: &corev1.Lifecycle{
+								PostStart: &corev1.LifecycleHandler{
+									Exec: &corev1.ExecAction{
+										Command: tailscaleconfig.PostStartSetConfigCommand(
+											services,
+										),
+									},
+								},
+								PreStop: &corev1.LifecycleHandler{
+									Exec: &corev1.ExecAction{
+										Command: tailscaleconfig.PreStopDrainCommand(services),
+									},
 								},
 							},
 							VolumeMounts: []corev1.VolumeMount{

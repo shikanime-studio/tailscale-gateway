@@ -89,11 +89,11 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 		t.Fatalf("serve-config missing")
 	}
 
-    type generic struct {
-        Services map[string]struct {
-            Endpoints map[string]string `json:"endpoints"`
-        } `json:"services"`
-    }
+	type generic struct {
+		Services map[string]struct {
+			Endpoints map[string]string `json:"endpoints"`
+		} `json:"services"`
+	}
 	var parsed generic
 	if err := json.Unmarshal([]byte(data), &parsed); err != nil {
 		t.Fatalf("failed to parse serve-config: %v", err)
@@ -102,7 +102,7 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 	if !ok {
 		t.Fatalf("service key not found: svc:%s", gw.Name)
 	}
-    if got := svc.Endpoints["tcp:80"]; got != "http://127.0.0.1:80" {
-        t.Fatalf("unexpected endpoint: got %s, want %s", got, "http://127.0.0.1:80")
-    }
+	if got := svc.Endpoints["tcp:80"]; got != "http://127.0.0.1:80" {
+		t.Fatalf("unexpected endpoint: got %s, want %s", got, "http://127.0.0.1:80")
+	}
 }

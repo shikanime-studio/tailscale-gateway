@@ -333,11 +333,11 @@ func TestServicesApplyBuildsTargets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
 	}
-    type generic struct {
-        Services map[string]struct {
-            Endpoints map[string]string `json:"endpoints"`
-        } `json:"services"`
-    }
+	type generic struct {
+		Services map[string]struct {
+			Endpoints map[string]string `json:"endpoints"`
+		} `json:"services"`
+	}
 	var parsed generic
 	if err := json.Unmarshal(outBytes, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal output: %v", err)
@@ -346,9 +346,9 @@ func TestServicesApplyBuildsTargets(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected service key svc:test-gateway")
 	}
-    if got := svc.Endpoints["tcp:80"]; got != "http://127.0.0.1:80" {
-        t.Fatalf("expected tcp:80 -> http://127.0.0.1:80, got %s", got)
-    }
+	if got := svc.Endpoints["tcp:80"]; got != "http://127.0.0.1:80" {
+		t.Fatalf("expected tcp:80 -> http://127.0.0.1:80, got %s", got)
+	}
 }
 
 // Helper function to create pointers

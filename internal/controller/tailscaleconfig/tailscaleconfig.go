@@ -1,7 +1,10 @@
 package tailscaleconfig
 
 import (
+	"bytes"
 	"fmt"
+	"sort"
+	"text/template"
 
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	conffile "tailscale.com/ipn/conffile"
@@ -126,4 +129,38 @@ func newServiceDetails() *conffile.ServiceDetailsFile {
 		Endpoints:  map[*tailcfg.ProtoPortRange]*conffile.Target{},
 		Advertised: opt.True,
 	}
+}
+
+func ServiceNames(c *Config) []string {
+	var names []string
+	for n := range c.cfg.Services {
+		names = append(names, n.String())
+	}
+	sort.Strings(names)
+	return names
+}
+
+var AdvertiseServicesScript = template.Must(template.New("postStart").Parse(`
+until tailscale status >/dev/null 2>&1; do sleep 1; done
+{{- range .Services }}
+tailscale serve advertise {{ . }}
+{{- end }}
+`))
+
+var DrainServicesScript = template.Must(template.New("preStop").Parse(`
+{{- range .Services }}
+tailscale serve drain {{ . }} || true
+{{- end }}
+`))
+
+func PostStartSetConfigCommand(services []string) []string {
+	var buf bytes.Buffer
+	_ = AdvertiseServicesScript.Execute(&buf, struct{ Services []string }{Services: services})
+	return []string{"/bin/sh", "-c", buf.String()}
+}
+
+func PreStopDrainCommand(services []string) []string {
+	var buf bytes.Buffer
+	_ = DrainServicesScript.Execute(&buf, struct{ Services []string }{Services: services})
+	return []string{"/bin/sh", "-c", buf.String()}
 }
