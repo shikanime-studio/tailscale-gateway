@@ -1,0 +1,14 @@
+{
+  "configurations": [
+    {
+      "name": "Attach Skaffold",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "host": "localhost",
+      "port": 56268,
+      "cwd": "${workspaceFolder}/cmd/controller",
+      "remotePath": "/go"
+    }
+  ]
+}

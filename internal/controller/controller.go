@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/infinity-blackhole/tailscale-gateway/internal/controller/services"
+	"github.com/infinity-blackhole/tailscale-gateway/internal/controller/caddyconfig"
+	"github.com/infinity-blackhole/tailscale-gateway/internal/controller/tailscaleconfig"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,14 +14,13 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwclientset "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
-	conffile "tailscale.com/ipn/conffile"
+	gateway "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 )
 
 // GatewayReconciler reconciles a Gateway object
 type GatewayReconciler struct {
 	Kube    kubernetes.Interface
-	Gateway gwclientset.Interface
+	Gateway gateway.Interface
 	Scheme  *runtime.Scheme
 	Cfg     *Config
 }
@@ -41,7 +41,7 @@ const (
 // NewGatewayReconciler creates a new GatewayReconciler
 func NewGatewayReconciler(
 	kube kubernetes.Interface,
-	gw gwclientset.Interface,
+	gw gateway.Interface,
 	scheme *runtime.Scheme,
 	cfg *Config,
 ) *GatewayReconciler {
@@ -77,7 +77,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Validate Gateway listeners
 	if err := r.validateListeners(gateway); err != nil {
 		log.Error(err, "Gateway validation failed")
-		if err := r.updateGatewayStatus(ctx, gateway, false, ConditionReasonInvalid, err.Error()); err != nil {
+		if err = r.updateGatewayStatus(ctx, gateway, false, ConditionReasonInvalid, err.Error()); err != nil {
 			log.Error(err, "Failed to update Gateway status")
 		}
 		return ctrl.Result{}, nil // Don't retry validation errors immediately
@@ -87,7 +87,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Ensure Deployment with proxy + tailscale sidecar configured via Tailscale Services
 	if err := r.ensureProxyDeployment(ctx, gateway); err != nil {
 		log.Error(err, "Failed to manage proxy servers")
-		if err := r.updateGatewayStatus(ctx, gateway, false, ConditionReasonNotReady, err.Error()); err != nil {
+		if err = r.updateGatewayStatus(ctx, gateway, false, ConditionReasonNotReady, err.Error()); err != nil {
 			log.Error(err, "Failed to update Gateway status")
 		}
 		return ctrl.Result{}, err
@@ -114,7 +114,8 @@ func (r *GatewayReconciler) validateListeners(gateway *gatewayv1.Gateway) error 
 	}
 
 	for i, listener := range gateway.Spec.Listeners {
-		if listener.Protocol != gatewayv1.HTTPProtocolType {
+		if listener.Protocol != gatewayv1.HTTPProtocolType &&
+			listener.Protocol != gatewayv1.HTTPSProtocolType {
 			return fmt.Errorf("listener %d: unsupported protocol %s", i, listener.Protocol)
 		}
 
@@ -163,40 +164,22 @@ func (r *GatewayReconciler) ensureProxyDeployment(
 	ds := client.BuildProxyDaemonSet(gateway, r.Cfg, r.Cfg.GetTailscaleImage())
 	cmName := fmt.Sprintf("tailscale-services-%s", gateway.Name)
 	secretName := gateway.Name
+	proxyCMName := caddyconfig.ConfigMapName(gateway)
 
 	routes, err := r.getHTTPRoutesForGateway(ctx, gateway)
 	if err != nil {
 		return err
 	}
 
-	var cfg *conffile.ServicesConfigFile
-	cmExisting, err := r.Kube.CoreV1().
-		ConfigMaps(gateway.Namespace).
-		Get(ctx, cmName, metav1.GetOptions{})
-	if err == nil {
-		if cmExisting.Data != nil {
-			if data, ok := cmExisting.Data["services.hujson"]; ok && data != "" {
-				if c, uerr := services.Unmarshal([]byte(data)); uerr == nil {
-					cfg = c
-				}
-			}
-		}
-	} else if !apierrors.IsNotFound(err) {
-		return err
-	}
-	if cfg == nil {
-		cfg = services.NewServiceConfig()
-	}
-
-	opts := []services.Option{services.WithGateway(gateway), services.WithHTTPRoutes(routes)}
-	if err = services.Apply(cfg, opts...); err != nil {
-		return err
-	}
-	marshaled, err := services.Marshal(cfg)
+	tsCfg, err := tailscaleconfig.NewConfig(gateway, tailscaleconfig.WithHTTPRoutes(routes))
 	if err != nil {
 		return err
 	}
-	servicesConfig := string(marshaled)
+
+	caddyCfg, err := caddyconfig.NewConfig(gateway, caddyconfig.WithHTTPRoutes(routes))
+	if err != nil {
+		return err
+	}
 
 	if err := client.EnsureProxyRBAC(ctx, gateway, saName); err != nil {
 		return err
@@ -207,7 +190,10 @@ func (r *GatewayReconciler) ensureProxyDeployment(
 	if err := client.ApplyProxy(ctx, gateway, ds); err != nil {
 		return err
 	}
-	if err := client.UpdateServiceConfig(ctx, gateway, cmName, ds.ObjectMeta.Labels, servicesConfig); err != nil {
+	if err := client.UpdateServicesConfig(ctx, gateway, cmName, ds.ObjectMeta.Labels, tsCfg); err != nil {
+		return err
+	}
+	if err := client.UpdateCaddyConfig(ctx, gateway, proxyCMName, ds.ObjectMeta.Labels, caddyCfg); err != nil {
 		return err
 	}
 	return nil

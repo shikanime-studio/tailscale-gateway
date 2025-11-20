@@ -104,7 +104,7 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 	if !ok {
 		t.Fatalf("service key not found: svc:%s", gw.Name)
 	}
-	want := "http://echo." + gw.Namespace + ".svc.cluster.local:8080"
+	want := "http://127.0.0.1:80"
 	if got := svc.Endpoints["tcp:80"]; got != want {
 		t.Fatalf("unexpected endpoint: got %s, want %s", got, want)
 	}

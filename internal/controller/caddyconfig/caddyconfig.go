@@ -1,0 +1,118 @@
+package caddyconfig
+
+import (
+	"fmt"
+	"sort"
+
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+)
+
+type Config struct {
+	Sites []Site
+}
+
+type Site struct {
+	Address   string
+	Upstreams []string
+}
+
+func (c *Config) Marshal() ([]byte, error) { return Marshal(c) }
+
+func ConfigMapName(gw *gatewayv1.Gateway) string {
+	return fmt.Sprintf("caddy-config-%s", gw.Name)
+}
+
+type options struct {
+	HTTPRoutes []*gatewayv1.HTTPRoute
+}
+
+type Option func(*options)
+
+func makeOptions(opts []Option) options {
+	o := options{}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o
+}
+
+func WithHTTPRoutes(hrs []gatewayv1.HTTPRoute) Option {
+	return func(o *options) {
+		for i := range hrs {
+			o.HTTPRoutes = append(o.HTTPRoutes, &hrs[i])
+		}
+	}
+}
+
+// NewConfig builds a Caddyfile model from Gateway + HTTPRoutes.
+func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
+	o := makeOptions(opts)
+
+	if gw == nil {
+		return nil, fmt.Errorf("gateway is nil")
+	}
+
+	sites := map[string]map[string]struct{}{}
+	for _, l := range gw.Spec.Listeners {
+		for _, hr := range o.HTTPRoutes {
+			// Only include routes that reference this gateway
+			parentOK := false
+			for _, pr := range hr.Spec.ParentRefs {
+				if string(pr.Name) == string(gw.Name) {
+					if pr.Namespace == nil || string(*pr.Namespace) == string(gw.Namespace) {
+						parentOK = true
+						break
+					}
+				}
+			}
+			if !parentOK {
+				continue
+			}
+
+			upstreams := []string{}
+			for _, rrule := range hr.Spec.Rules {
+				for _, br := range rrule.BackendRefs {
+					if br.Port == nil {
+						continue
+					}
+					ns := hr.Namespace
+					if br.Namespace != nil {
+						ns = string(*br.Namespace)
+					}
+					upstreams = append(
+						upstreams,
+						fmt.Sprintf("%s.%s:%d", br.Name, ns, *br.Port),
+					)
+				}
+			}
+			if len(upstreams) == 0 {
+				continue
+			}
+
+			addr := fmt.Sprintf("127.0.0.1:%d", l.Port)
+			if _, ok := sites[addr]; !ok {
+				sites[addr] = map[string]struct{}{}
+			}
+			for _, u := range upstreams {
+				sites[addr][u] = struct{}{}
+			}
+		}
+	}
+
+	// Convert to deterministic slice with sorted upstreams
+	out := &Config{}
+	for addr, set := range sites {
+		ups := make([]string, 0, len(set))
+		for u := range set {
+			ups = append(ups, u)
+		}
+		sort.Strings(ups)
+		out.Sites = append(out.Sites, Site{Address: addr, Upstreams: ups})
+	}
+	sort.Slice(
+		out.Sites,
+		func(i, j int) bool { return out.Sites[i].Address < out.Sites[j].Address },
+	)
+
+	return out, nil
+}

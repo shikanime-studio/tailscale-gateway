@@ -1,4 +1,4 @@
-package services
+package tailscaleconfig
 
 import (
 	"encoding/json"
@@ -43,15 +43,9 @@ func TestMarshal_WithRouteOptions(t *testing.T) {
 			}},
 		},
 	}
-	cfg := NewServiceConfig()
-	svcName := ServiceName(gw.Name)
-	cfg.Services[svcName] = NewServiceDetails()
-	if err := Apply(
-		cfg,
-		WithGateway(gw),
-		WithHTTPRoute(hrHTTP),
-	); err != nil {
-		t.Fatalf("apply failed: %v", err)
+	cfg, err := NewConfig(gw, WithHTTPRoute(hrHTTP))
+	if err != nil {
+		t.Fatalf("new config failed: %v", err)
 	}
 	outBytes, err := Marshal(cfg)
 	if err != nil {
@@ -75,10 +69,10 @@ func TestMarshal_WithRouteOptions(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected service key svc:test-gw")
 	}
-	if got := svc.Endpoints["tcp:80"]; got != "http://svc.default.svc.cluster.local:8080" {
+	if got := svc.Endpoints["tcp:80"]; got != "http://127.0.0.1:80" {
 		t.Fatalf("expected default http:80 target, got %s", got)
 	}
-	if got := svc.Endpoints["tcp:8081"]; got != "http://svc.default.svc.cluster.local:8080" {
+	if got := svc.Endpoints["tcp:8081"]; got != "http://127.0.0.1:8081" {
 		t.Fatalf("expected http:8081 target override, got %s", got)
 	}
 }

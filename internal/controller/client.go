@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/infinity-blackhole/tailscale-gateway/internal/controller/caddyconfig"
+	"github.com/infinity-blackhole/tailscale-gateway/internal/controller/tailscaleconfig"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -13,20 +15,20 @@ import (
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwclientset "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
+	gateway "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 )
 
 // Client provides high-level helpers around Kubernetes and Gateway clients.
 type Client struct {
 	Kube    kubernetes.Interface
-	Gateway gwclientset.Interface
+	Gateway gateway.Interface
 	Scheme  *runtime.Scheme
 }
 
 // NewClient constructs a Client from kube and gateway clientsets.
 func NewClient(
 	kube kubernetes.Interface,
-	gw gwclientset.Interface,
+	gw gateway.Interface,
 	scheme *runtime.Scheme,
 ) *Client {
 	return &Client{Kube: kube, Gateway: gw, Scheme: scheme}
@@ -158,6 +160,25 @@ func (c *Client) BuildProxyDaemonSet(
 								},
 							},
 						},
+						{
+							Name:    "caddy",
+							Image:   cfg.GetProxyImage(),
+							Command: []string{"caddy"},
+							Args: []string{
+								"run",
+								"--config",
+								"/etc/caddy/Caddyfile",
+								"--adapter",
+								"caddyfile",
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "caddy-config",
+									MountPath: "/etc/caddy/Caddyfile",
+									SubPath:   "Caddyfile",
+								},
+							},
+						},
 					},
 					Volumes: []corev1.Volume{
 						{
@@ -167,6 +188,19 @@ func (c *Client) BuildProxyDaemonSet(
 									LocalObjectReference: corev1.LocalObjectReference{Name: cmName},
 									Items: []corev1.KeyToPath{
 										{Key: "services.hujson", Path: "services.hujson"},
+									},
+								},
+							},
+						},
+						{
+							Name: "caddy-config",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: fmt.Sprintf("caddy-config-%s", gateway.Name),
+									},
+									Items: []corev1.KeyToPath{
+										{Key: "Caddyfile", Path: "Caddyfile"},
 									},
 								},
 							},
@@ -303,14 +337,67 @@ func (c *Client) EnsureProxySecret(
 	return nil
 }
 
-// UpdateServiceConfig ensures the services ConfigMap exists and is up to date.
-func (c *Client) UpdateServiceConfig(
+// UpdateCaddyConfig ensures the proxy Caddy JSON ConfigMap exists and is up to date.
+func (c *Client) UpdateCaddyConfig(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	cmName string,
 	labels map[string]string,
-	servicesConfig string,
+	cfg *caddyconfig.Config,
 ) error {
+	b, merr := caddyconfig.Marshal(cfg)
+	if merr != nil {
+		return merr
+	}
+	caddyfile := string(b)
+	cm, getErr := c.Kube.CoreV1().
+		ConfigMaps(gateway.Namespace).
+		Get(ctx, cmName, metav1.GetOptions{})
+	if getErr != nil {
+		if apierrors.IsNotFound(getErr) {
+			cm = &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cmName,
+					Namespace: gateway.Namespace,
+					Labels:    labels,
+				},
+				Data: map[string]string{"Caddyfile": caddyfile},
+			}
+			if setErr := ctrl.SetControllerReference(gateway, cm, c.Scheme); setErr != nil {
+				return setErr
+			}
+			_, createErr := c.Kube.CoreV1().
+				ConfigMaps(gateway.Namespace).
+				Create(ctx, cm, metav1.CreateOptions{})
+			return createErr
+		}
+		return getErr
+	}
+	if cm.Data == nil || cm.Data["Caddyfile"] != caddyfile {
+		cm.Data = map[string]string{"Caddyfile": caddyfile}
+		if setErr := ctrl.SetControllerReference(gateway, cm, c.Scheme); setErr != nil {
+			return setErr
+		}
+		if _, updateErr := c.Kube.CoreV1().ConfigMaps(gateway.Namespace).Update(ctx, cm, metav1.UpdateOptions{}); updateErr != nil {
+			return updateErr
+		}
+	}
+	return nil
+}
+
+// UpdateServicesConfig ensures the services ConfigMap exists and is up to date.
+func (c *Client) UpdateServicesConfig(
+	ctx context.Context,
+	gateway *gatewayv1.Gateway,
+	cmName string,
+	labels map[string]string,
+	cfg *tailscaleconfig.Config,
+) error {
+	b, merr := tailscaleconfig.Marshal(cfg)
+	if merr != nil {
+		return merr
+	}
+	servicesConfig := string(b)
 	cm, getErr := c.Kube.CoreV1().
 		ConfigMaps(gateway.Namespace).
 		Get(ctx, cmName, metav1.GetOptions{})

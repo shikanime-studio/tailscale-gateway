@@ -2,9 +2,10 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
-	"github.com/infinity-blackhole/tailscale-gateway/internal/controller/services"
+	tailscaleconfig "github.com/infinity-blackhole/tailscale-gateway/internal/controller/tailscaleconfig"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -319,25 +320,34 @@ func TestServicesApplyBuildsTargets(t *testing.T) {
 		},
 	}
 
-	cfg := services.NewServiceConfig()
-	opts := []services.Option{services.WithGateway(gw)}
+	var opts []tailscaleconfig.Option
 	for i := range routes {
 		rt := routes[i]
-		opts = append(opts, services.WithHTTPRoute(&rt))
+		opts = append(opts, tailscaleconfig.WithHTTPRoute(&rt))
 	}
-	if err := services.Apply(cfg, opts...); err != nil {
-		t.Fatalf("Apply returned error: %v", err)
+	cfg, err := tailscaleconfig.NewConfig(gw, opts...)
+	if err != nil {
+		t.Fatalf("new config failed: %v", err)
 	}
-
-	svcName := services.ServiceName("test-gateway")
-	sd := cfg.Services[svcName]
-	if sd == nil {
-		t.Fatalf("expected service details for %q", svcName)
+	outBytes, err := tailscaleconfig.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
 	}
-
-	// Expect exactly one endpoint per listener port
-	if len(sd.Endpoints) != 1 {
-		t.Fatalf("expected 1 endpoint, got %d", len(sd.Endpoints))
+	type generic struct {
+		Services map[string]struct {
+			Endpoints map[string]string `json:"endpoints"`
+		} `json:"services"`
+	}
+	var parsed generic
+	if err := json.Unmarshal(outBytes, &parsed); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+	svc, ok := parsed.Services["svc:test-gateway"]
+	if !ok {
+		t.Fatalf("expected service key svc:test-gateway")
+	}
+	if len(svc.Endpoints) != 1 {
+		t.Fatalf("expected 1 endpoint, got %d", len(svc.Endpoints))
 	}
 }
 

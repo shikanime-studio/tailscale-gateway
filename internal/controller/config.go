@@ -16,7 +16,7 @@ func New() *Config {
 
 	v.SetDefault("metrics_bind_address", ":8080")
 	v.SetDefault("health_probe_bind_address", ":8081")
-	v.SetDefault("proxy_image", "ghcr.io/infinity-blackhole/tailscale-gateway/proxy")
+	v.SetDefault("proxy_image", "caddy:latest")
 	v.SetDefault("tailscale_image", "tailscale/tailscale:latest")
 
 	v.BindEnv("metrics_bind_address", "METRICS_BIND_ADDRESS")
