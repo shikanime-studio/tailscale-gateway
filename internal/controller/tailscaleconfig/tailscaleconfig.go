@@ -16,6 +16,7 @@ func (c *Config) Marshal() ([]byte, error) { return Marshal(c) }
 
 type serviceOptions struct {
 	HTTPRoutes []*gatewayv1.HTTPRoute
+	Host       string
 }
 
 type Option func(*serviceOptions)
@@ -40,6 +41,10 @@ func WithHTTPRoutes(hrs []gatewayv1.HTTPRoute) Option {
 	}
 }
 
+func WithHost(name string) Option {
+	return func(o *serviceOptions) { o.Host = name }
+}
+
 func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 	o := makeOptions(opts)
 	if gw == nil {
@@ -50,16 +55,25 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 
 	// Web handlers for hostnames or default gateway hostname
 	for _, hr := range o.HTTPRoutes {
-		for _, host := range hr.Spec.Hostnames {
-			svcName := tailcfg.AsServiceName(fmt.Sprintf("svc:%s", host))
+		// Determine service key: hostnames or gateway name
+		var serviceKeys []tailcfg.ServiceName
+		if len(hr.Spec.Hostnames) == 0 {
+			serviceKeys = []tailcfg.ServiceName{
+				tailcfg.AsServiceName(fmt.Sprintf("svc:%s", gw.Name)),
+			}
+		} else {
+			for _, host := range hr.Spec.Hostnames {
+				serviceKeys = append(serviceKeys, tailcfg.AsServiceName(fmt.Sprintf("svc:%s", host)))
+			}
+		}
+
+		for _, svcName := range serviceKeys {
 			if _, ok := cfg.cfg.Services[svcName]; !ok {
 				cfg.cfg.Services[svcName] = &ipn.ServiceConfig{
 					TCP: map[uint16]*ipn.TCPPortHandler{},
 					Web: map[ipn.HostPort]*ipn.WebServerConfig{},
 				}
 			}
-
-			// TCP: mark HTTP-capable ports
 			for _, l := range gw.Spec.Listeners {
 				switch l.Protocol {
 				case gatewayv1.HTTPProtocolType:
@@ -79,13 +93,28 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 								l.Protocol != gatewayv1.HTTPSProtocolType {
 								continue
 							}
-							for _, h := range hr.Spec.Hostnames {
-								addr := ipn.HostPort(fmt.Sprintf("%s:%d", h, l.Port))
+							if len(hr.Spec.Hostnames) == 0 {
+								host := fmt.Sprintf("%s-%s", gw.Namespace, gw.Name)
+								if o.Host != "" {
+									host = fmt.Sprintf("%s.%s", host, o.Host)
+								}
+								addr := ipn.HostPort(fmt.Sprintf("%s:%d", host, l.Port))
 								if _, ok := cfg.cfg.Services[svcName].Web[addr]; !ok {
 									cfg.cfg.Services[svcName].Web[addr] = &ipn.WebServerConfig{
 										Handlers: map[string]*ipn.HTTPHandler{
 											"/": {Proxy: "http://127.0.0.1:80"},
 										},
+									}
+								}
+							} else {
+								for _, h := range hr.Spec.Hostnames {
+									host := string(h)
+									if o.Host != "" {
+										host = fmt.Sprintf("%s.%s", host, o.Host)
+									}
+									addr := ipn.HostPort(fmt.Sprintf("%s:%d", host, l.Port))
+									if _, ok := cfg.cfg.Services[svcName].Web[addr]; !ok {
+										cfg.cfg.Services[svcName].Web[addr] = &ipn.WebServerConfig{Handlers: map[string]*ipn.HTTPHandler{"/": {Proxy: "http://127.0.0.1:80"}}}
 									}
 								}
 							}

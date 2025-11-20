@@ -17,10 +17,4 @@ build:
 manifests:
   kustomize:
     paths:
-      - manifests
-profiles:
-  - name: telsha-telnet
-    manifests:
-      kustomize:
-        paths:
-          - manifests/canary
+      - manifests/gateway/overlays/demo

@@ -84,9 +84,9 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("configmap not found: %v", err)
 	}
-	data := cm.Data["services.hujson"]
+	data := cm.Data["serve-config"]
 	if data == "" {
-		t.Fatalf("services.hujson missing")
+		t.Fatalf("serve-config missing")
 	}
 
 	type generic struct {
@@ -101,7 +101,7 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 	}
 	var parsed generic
 	if err := json.Unmarshal([]byte(data), &parsed); err != nil {
-		t.Fatalf("failed to parse services.hujson: %v", err)
+		t.Fatalf("failed to parse serve-config: %v", err)
 	}
 	svc, ok := parsed.Services["svc:"+gw.Name]
 	if !ok {
