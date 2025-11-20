@@ -122,7 +122,7 @@ func (c *Client) BuildProxyDaemonSet(
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: gateway.Name,
 											},
-											Key: "TS_AUTHKEY",
+											Key: "authkey",
 										},
 									},
 								},
@@ -306,7 +306,7 @@ func (c *Client) EnsureProxySecret(
 				Type:       corev1.SecretTypeOpaque,
 			}
 			if v := cfg.GetTSAuthKey(); v != "" {
-				sec.StringData = map[string]string{"TS_AUTHKEY": v}
+				sec.StringData = map[string]string{"authkey": v}
 			}
 			if setErr := ctrl.SetControllerReference(gateway, sec, c.Scheme); setErr != nil {
 				return setErr
@@ -324,7 +324,7 @@ func (c *Client) EnsureProxySecret(
 				if sec.StringData == nil {
 					sec.StringData = map[string]string{}
 				}
-				sec.StringData["TS_AUTHKEY"] = string(v)
+				sec.StringData["authkey"] = string(v)
 				delete(sec.Data, "auth-key")
 				changed = true
 			}
@@ -333,7 +333,7 @@ func (c *Client) EnsureProxySecret(
 			if sec.StringData == nil {
 				sec.StringData = map[string]string{}
 			}
-			sec.StringData["TS_AUTHKEY"] = v
+			sec.StringData["authkey"] = v
 			changed = true
 		}
 		if changed {
