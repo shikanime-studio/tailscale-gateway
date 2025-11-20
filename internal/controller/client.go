@@ -101,7 +101,18 @@ func (c *Client) BuildProxyDaemonSet(
 							Image: image,
 							Env: []corev1.EnvVar{
 								{Name: "TS_USERSPACE", Value: "true"},
-								{Name: "TS_HOSTNAME", Value: gateway.Name},
+								{
+									Name: "NODE_NAME",
+									ValueFrom: &corev1.EnvVarSource{
+										FieldRef: &corev1.ObjectFieldSelector{
+											FieldPath: "spec.nodeName",
+										},
+									},
+								},
+								{
+									Name:  "TS_HOSTNAME",
+									Value: fmt.Sprintf("$(NODE_NAME)-%s", gateway.Name),
+								},
 								{Name: "TS_KUBE_SECRET", Value: gateway.Name},
 								{Name: "TS_DEBUG_FIREWALL_MODE", Value: "auto"},
 								{
