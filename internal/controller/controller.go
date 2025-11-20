@@ -125,7 +125,6 @@ func (r *GatewayReconciler) validateListeners(gateway *gatewayv1.Gateway) error 
 	return nil
 }
 
-// removed: ensureProxyDeployment and getHTTPRoutesForGateway moved to client helpers
 
 // updateGatewayStatus updates the Gateway status conditions
 func (r *GatewayReconciler) updateGatewayStatus(
