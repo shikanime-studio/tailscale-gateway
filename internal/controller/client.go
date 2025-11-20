@@ -122,7 +122,7 @@ func (c *Client) BuildProxyDaemonSet(
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: gateway.Name,
 											},
-											Key: "TS_AUTHKEY",
+											Key: "auth_key",
 										},
 									},
 								},
