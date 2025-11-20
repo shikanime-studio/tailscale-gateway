@@ -154,10 +154,6 @@ func (c *Client) BuildProxyDaemonSet(
 									Name:      "tailscale-services",
 									MountPath: "/etc/tailscaled/services.hujson",
 								},
-								{
-									Name:      "net-tun",
-									MountPath: "/dev/net/tun",
-								},
 							},
 						},
 						{
@@ -202,17 +198,6 @@ func (c *Client) BuildProxyDaemonSet(
 									Items: []corev1.KeyToPath{
 										{Key: "Caddyfile", Path: "Caddyfile"},
 									},
-								},
-							},
-						},
-						{
-							Name: "net-tun",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/dev/net/tun",
-									Type: func(t corev1.HostPathType) *corev1.HostPathType { return &t }(
-										corev1.HostPathCharDev,
-									),
 								},
 							},
 						},
