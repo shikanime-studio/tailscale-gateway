@@ -161,7 +161,7 @@ func (r *GatewayReconciler) ensureProxyDeployment(
 ) error {
 	client := NewClient(r.Kube, r.Gateway, r.Scheme)
 	saName := client.ServiceAccountName(gateway)
-	cmName := fmt.Sprintf("tailscale-services-%s", gateway.Name)
+	cmName := fmt.Sprintf("%s-services", gateway.Name)
 	secretName := gateway.Name
 	proxyCMName := caddyconfig.ConfigMapName(gateway)
 

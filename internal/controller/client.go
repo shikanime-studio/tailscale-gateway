@@ -39,7 +39,7 @@ func (c *Client) GetProxy(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 ) (*appsv1.DaemonSet, error) {
-	name := fmt.Sprintf("tailscale-gateway-%s", gateway.Name)
+	name := fmt.Sprintf("%s-tailscale-gateway", gateway.Name)
 	return c.Kube.AppsV1().DaemonSets(gateway.Namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
@@ -74,7 +74,7 @@ func (c *Client) ApplyProxy(
 
 // ServiceAccountName returns the ServiceAccount name used for the Gateway.
 func (c *Client) ServiceAccountName(gateway *gatewayv1.Gateway) string {
-	return fmt.Sprintf("tailscale-gateway-%s", gateway.Name)
+	return fmt.Sprintf("%s-tailscale-gateway", gateway.Name)
 }
 
 // BuildProxyDaemonSet constructs the DaemonSet running Tailscale and Caddy.
@@ -85,9 +85,9 @@ func (c *Client) BuildProxyDaemonSet(
 	proxyImage string,
 	image string,
 ) *appsv1.DaemonSet {
-	name := fmt.Sprintf("tailscale-gateway-%s", gateway.Name)
+	name := fmt.Sprintf("%s-tailscale-gateway", gateway.Name)
 	ns := gateway.Namespace
-	cmName := fmt.Sprintf("tailscale-services-%s", gateway.Name)
+	cmName := fmt.Sprintf("%s-services", gateway.Name)
 
 	labels := map[string]string{"app": "tailscale-gateway", "gateway": gateway.Name}
 
@@ -210,7 +210,7 @@ func (c *Client) BuildProxyDaemonSet(
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
 									LocalObjectReference: corev1.LocalObjectReference{
-										Name: fmt.Sprintf("caddy-config-%s", gateway.Name),
+										Name: caddyconfig.ConfigMapName(gateway),
 									},
 									Items: []corev1.KeyToPath{
 										{Key: "Caddyfile", Path: "Caddyfile"},
