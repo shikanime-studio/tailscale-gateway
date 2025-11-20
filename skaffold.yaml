@@ -14,13 +14,9 @@ build:
             - go.sum
         dir: ./cmd/controller
         fromImage: cgr.dev/chainguard/glibc-dynamic
-manifests:
-  kustomize:
-    paths:
-      - manifests
 profiles:
-  - name: telsha-telnet
+  - name: demo
     manifests:
       kustomize:
         paths:
-          - manifests/canary
+          - manifests/gateway/overlays/demo
