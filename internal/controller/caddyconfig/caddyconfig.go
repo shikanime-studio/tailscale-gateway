@@ -24,6 +24,7 @@ func ConfigMapName(gw *gatewayv1.Gateway) string {
 
 type options struct {
 	HTTPRoutes []*gatewayv1.HTTPRoute
+	Host       string
 }
 
 type Option func(*options)
@@ -42,6 +43,10 @@ func WithHTTPRoutes(hrs []gatewayv1.HTTPRoute) Option {
 			o.HTTPRoutes = append(o.HTTPRoutes, &hrs[i])
 		}
 	}
+}
+
+func WithHost(name string) Option {
+	return func(o *options) { o.Host = name }
 }
 
 // NewConfig builds a Caddyfile model from Gateway + HTTPRoutes.
@@ -99,7 +104,11 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 				}
 			} else {
 				for _, h := range hr.Spec.Hostnames {
-					addr := fmt.Sprintf("%s:%d", h, l.Port)
+					host := string(h)
+					if o.Host != "" {
+						host = fmt.Sprintf("%s.%s", host, o.Host)
+					}
+					addr := fmt.Sprintf("%s:%d", host, l.Port)
 					if _, ok := sites[addr]; !ok {
 						sites[addr] = map[string]struct{}{}
 					}

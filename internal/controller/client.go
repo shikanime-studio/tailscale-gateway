@@ -117,7 +117,7 @@ func (c *Client) BuildProxyDaemonSet(
 								{Name: "TS_DEBUG_FIREWALL_MODE", Value: "auto"},
 								{
 									Name:  "TS_SERVE_CONFIG",
-									Value: "/var/lib/tailscale/services/services.hujson",
+									Value: "/etc/tailscaled/services.hujson/services.hujson",
 								},
 								{
 									Name: "POD_NAME",
@@ -152,7 +152,7 @@ func (c *Client) BuildProxyDaemonSet(
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "tailscale-services",
-									MountPath: "/var/lib/tailscale/services",
+									MountPath: "/etc/tailscaled/services.hujson",
 								},
 								{
 									Name:      "net-tun",
