@@ -14,7 +14,9 @@ build:
             - go.sum
         dir: ./cmd/controller
         fromImage: cgr.dev/chainguard/glibc-dynamic
-manifests:
-  kustomize:
-    paths:
-      - manifests/gateway/overlays/demo
+profiles:
+  - name: demo
+    manifests:
+      kustomize:
+        paths:
+          - manifests/gateway/overlays/demo
