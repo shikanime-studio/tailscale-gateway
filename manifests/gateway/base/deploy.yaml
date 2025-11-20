@@ -23,5 +23,5 @@ spec:
             - name: TS_AUTHKEY
               valueFrom:
                 secretKeyRef:
-                  name: tailscale-auth
-                  key: auth-key
+                  name: tailscale-gateway-controller
+                  key: authkey
