@@ -140,15 +140,13 @@ func ServiceNames(c *Config) []string {
 	return names
 }
 
-var AdvertiseServicesScript = template.Must(template.New("postStart").Parse(`
-until tailscale status >/dev/null 2>&1; do sleep 1; done
+var AdvertiseServicesScript = template.Must(template.New("postStart").Parse(`until tailscale status >/dev/null 2>&1; do sleep 1; done
 {{- range .Services }}
 tailscale serve advertise {{ . }}
 {{- end }}
 `))
 
-var DrainServicesScript = template.Must(template.New("preStop").Parse(`
-{{- range .Services }}
+var DrainServicesScript = template.Must(template.New("preStop").Parse(`{{- range .Services }}
 tailscale serve drain {{ . }} || true
 {{- end }}
 `))
