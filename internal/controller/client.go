@@ -72,10 +72,12 @@ func (c *Client) ApplyProxy(
 	return nil
 }
 
+// ServiceAccountName returns the ServiceAccount name used for the Gateway.
 func (c *Client) ServiceAccountName(gateway *gatewayv1.Gateway) string {
 	return fmt.Sprintf("tailscale-gateway-%s", gateway.Name)
 }
 
+// BuildProxyDaemonSet constructs the DaemonSet running Tailscale and Caddy.
 func (c *Client) BuildProxyDaemonSet(
 	gateway *gatewayv1.Gateway,
 	advertiseCmd []string,
@@ -223,6 +225,7 @@ func (c *Client) BuildProxyDaemonSet(
 	}
 }
 
+// EnsureServiceAccount creates the ServiceAccount if it does not exist.
 func (c *Client) EnsureServiceAccount(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
@@ -246,6 +249,7 @@ func (c *Client) EnsureServiceAccount(
 	return nil
 }
 
+// EnsureProxyRBAC ensures a ClusterRoleBinding grants the ServiceAccount access.
 func (c *Client) EnsureProxyRBAC(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
@@ -279,6 +283,7 @@ func (c *Client) EnsureProxyRBAC(
 	return nil
 }
 
+// EnsureProxySecret ensures the Secret with optional auth key exists and is current.
 func (c *Client) EnsureProxySecret(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,

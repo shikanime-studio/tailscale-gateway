@@ -244,7 +244,6 @@ func (r *GatewayReconciler) updateGatewayStatus(
 
 	meta.SetStatusCondition(&gateway.Status.Conditions, condition)
 
-	// Update listeners status using non-deprecated conditions
 	var listenerStatuses []gatewayv1.ListenerStatus
 	for _, listener := range gateway.Spec.Listeners {
 		listenerStatus := gatewayv1.ListenerStatus{

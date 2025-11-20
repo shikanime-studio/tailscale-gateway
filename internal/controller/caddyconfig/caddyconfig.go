@@ -16,8 +16,10 @@ type Site struct {
 	Upstreams []string
 }
 
+// Marshal serializes the Config to a Caddyfile by calling Marshal.
 func (c *Config) Marshal() ([]byte, error) { return Marshal(c) }
 
+// ConfigMapName returns the name of the ConfigMap that stores the Caddyfile.
 func ConfigMapName(gw *gatewayv1.Gateway) string {
 	return fmt.Sprintf("caddy-config-%s", gw.Name)
 }
@@ -29,6 +31,7 @@ type options struct {
 
 type Option func(*options)
 
+// makeOptions applies a series of Option functions to options.
 func makeOptions(opts []Option) options {
 	o := options{}
 	for _, opt := range opts {
@@ -37,6 +40,7 @@ func makeOptions(opts []Option) options {
 	return o
 }
 
+// WithHTTPRoutes adds multiple HTTPRoutes to the options.
 func WithHTTPRoutes(hrs []gatewayv1.HTTPRoute) Option {
 	return func(o *options) {
 		for i := range hrs {
@@ -45,6 +49,7 @@ func WithHTTPRoutes(hrs []gatewayv1.HTTPRoute) Option {
 	}
 }
 
+// WithHost sets the optional DNS suffix to append to hostnames.
 func WithHost(name string) Option {
 	return func(o *options) { o.Host = name }
 }

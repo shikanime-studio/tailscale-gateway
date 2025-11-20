@@ -13,6 +13,7 @@ type Config struct {
 	cfg *ipn.ServeConfig
 }
 
+// Marshal serializes the Config into HUJSON-formatted Tailscale serve config bytes.
 func (c *Config) Marshal() ([]byte, error) { return Marshal(c) }
 
 type serviceOptions struct {
@@ -22,6 +23,7 @@ type serviceOptions struct {
 
 type Option func(*serviceOptions)
 
+// makeOptions applies a series of Option functions to serviceOptions.
 func makeOptions(opts []Option) serviceOptions {
 	o := serviceOptions{}
 	for _, opt := range opts {
@@ -30,10 +32,12 @@ func makeOptions(opts []Option) serviceOptions {
 	return o
 }
 
+// WithHTTPRoute adds a single HTTPRoute to service options.
 func WithHTTPRoute(hr *gatewayv1.HTTPRoute) Option {
 	return func(o *serviceOptions) { o.HTTPRoutes = append(o.HTTPRoutes, hr) }
 }
 
+// WithHTTPRoutes adds multiple HTTPRoutes to service options.
 func WithHTTPRoutes(hrs []gatewayv1.HTTPRoute) Option {
 	return func(o *serviceOptions) {
 		for i := range hrs {
@@ -42,10 +46,12 @@ func WithHTTPRoutes(hrs []gatewayv1.HTTPRoute) Option {
 	}
 }
 
+// WithHost sets the optional DNS suffix to append to hostnames.
 func WithHost(name string) Option {
 	return func(o *serviceOptions) { o.Host = name }
 }
 
+// NewConfig builds a Tailscale serve Config from a Gateway and HTTPRoutes.
 func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 	o := makeOptions(opts)
 	if gw == nil {
@@ -129,10 +135,12 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 	return cfg, nil
 }
 
+// newServeConfig returns an empty Config with initialized internal maps.
 func newServeConfig() *Config {
 	return &Config{cfg: &ipn.ServeConfig{Services: map[tailcfg.ServiceName]*ipn.ServiceConfig{}}}
 }
 
+// AdvertiseServicesCommand returns a shell command to advertise all services.
 func AdvertiseServicesCommand(cfg *Config) ([]string, error) {
 	var svcs []string
 	for svcName := range cfg.cfg.Services {
@@ -145,6 +153,7 @@ func AdvertiseServicesCommand(cfg *Config) ([]string, error) {
 	return []string{"/bin/sh", "-c", strings.Join(cmds, "\n")}, nil
 }
 
+// DrainServicesCommand returns a shell command to drain all services, ignoring errors.
 func DrainServicesCommand(cfg *Config) ([]string, error) {
 	var svcs []string
 	for svcName := range cfg.cfg.Services {

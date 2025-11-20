@@ -84,7 +84,7 @@ func TestIntegration_ProxyDeploymentAndConfigMap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("configmap not found: %v", err)
 	}
-	data := cm.Data["serve-config"]
+	data := cm.Data["services.hujson"]
 	if data == "" {
 		t.Fatalf("serve-config missing")
 	}

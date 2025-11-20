@@ -6,6 +6,7 @@ import (
 	"github.com/tailscale/hujson"
 )
 
+// Marshal serializes the Config to HUJSON-formatted Tailscale serve config bytes.
 func Marshal(cfg *Config) ([]byte, error) {
 	b, err := json.Marshal(cfg.cfg)
 	if err != nil {
