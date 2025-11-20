@@ -42,7 +42,7 @@ kubectl -n tailscale-system create secret generic tailscale-gateway-controller \
 skaffold dev -p demo
 ```
 
-The demo profile builds the controller image with ko and deploys `manifests/gateway/overlays/demo`, which sets `TS_CERT_BASE_DOMAIN` for generated hostnames.
+The demo profile builds the controller image with ko and deploys `manifests/gateway/overlays/demo`.
 
 ## Configuration
 
@@ -51,9 +51,8 @@ Environment variables consumed by the controller:
 - `METRICS_BIND_ADDRESS` (default `:8080`)
 - `HEALTH_PROBE_BIND_ADDRESS` (default `:8081`)
 - `PROXY_IMAGE` (default `caddy:latest`)
-- `TAILSCALE_IMAGE` (default `tailscale/tailscale:latest`)
+- `TS_IMAGE` (default `tailscale/tailscale:latest`)
 - `TS_AUTHKEY` (optional; controller reads and writes `authkey` in Secret)
-- `TS_CERT_BASE_DOMAIN` (optional; suffix appended to generated hostnames)
 
 ## Usage
 
@@ -100,7 +99,7 @@ kubectl apply -k manifests/demo
 ### What gets created
 
 - DaemonSet `<gateway>-tailscale-gateway` in the Gateway namespace
-- ConfigMap `<gateway>-services` containing `services.hujson`
+- ConfigMap `<gateway>` containing `services.hujson`
 - ConfigMap `<gateway>-caddy-config` containing `Caddyfile`
 - Secret `<gateway>` in the Gateway namespace with key `authkey` (populated if `TS_AUTHKEY` is set)
 
@@ -123,7 +122,7 @@ kubectl -n <ns> get gateway <name> -o yaml
 kubectl -n <ns> get ds,pods -l app=tailscale-gateway
 
 # Configs
-kubectl -n <ns> get cm <name>-caddy-config <name>-services -o yaml
+kubectl -n <ns> get cm <name>-caddy-config <name> -o yaml
 ```
 
 ## Development

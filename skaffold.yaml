@@ -19,4 +19,5 @@ profiles:
     manifests:
       kustomize:
         paths:
+          - manifests/demo
           - manifests/gateway/overlays/demo
