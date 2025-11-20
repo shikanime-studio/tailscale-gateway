@@ -2,14 +2,8 @@
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: tailscale-gateway-demo
+  name: demo
   namespace: tailscale-gateway-demo
-  labels:
-    app.kubernetes.io/name: tailscale-gateway-demo
-    app.kubernetes.io/instance: demo
-    app.kubernetes.io/part-of: tailscale-gateway-demo
-    app.kubernetes.io/component: gateway
-    app.kubernetes.io/managed-by: kustomize
 spec:
   gatewayClassName: tailscale
   listeners:
