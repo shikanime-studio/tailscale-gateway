@@ -8,6 +8,4 @@ spec:
     spec:
       containers:
         - name: controller
-          env:
-            - name: TS_CERT_BASE_DOMAIN
-              value: tail70d29d.ts.net
+          env: []

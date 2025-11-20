@@ -21,7 +21,7 @@ func (c *Config) Marshal() ([]byte, error) { return Marshal(c) }
 
 // ConfigMapName returns the name of the ConfigMap that stores the Caddyfile.
 func ConfigMapName(gw *gatewayv1.Gateway) string {
-	return fmt.Sprintf("%s-caddy-config", gw.Name)
+	return fmt.Sprintf("%s-caddy", gw.Name)
 }
 
 type options struct {

@@ -196,7 +196,6 @@ func (r *GatewayReconciler) ensureProxyDeployment(
 	caddyCfg, err := caddyconfig.NewConfig(
 		gateway,
 		caddyconfig.WithHTTPRoutes(routes),
-		caddyconfig.WithHost(r.Cfg.GetTailscaleCertDomain()),
 	)
 	if err != nil {
 		return err
