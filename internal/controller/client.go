@@ -96,8 +96,19 @@ func (c *Client) EnsureDaemonSet(
 													),
 												),
 											applycorev1.EnvVar().
+												WithName("GATEWAY_NS").
+												WithValueFrom(
+													applycorev1.EnvVarSource().WithFieldRef(
+														applycorev1.ObjectFieldSelector().
+															WithFieldPath("metadata.namespace"),
+													),
+												),
+											applycorev1.EnvVar().
+												WithName("GATEWAY_NAME").
+												WithValue(gateway.Name),
+											applycorev1.EnvVar().
 												WithName("TS_HOSTNAME").
-												WithValue("$(NODE_NAME)"),
+												WithValue("$(GATEWAY_NS)-$(GATEWAY_NAME)-$(NODE_NAME)"),
 											applycorev1.EnvVar().
 												WithName("TS_KUBE_SECRET").
 												WithValue(gateway.Name),
