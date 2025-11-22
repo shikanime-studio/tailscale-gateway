@@ -9,6 +9,7 @@ import (
 	"tailscale.com/tailcfg"
 )
 
+// Config represents a Tailscale serve configuration.
 type Config struct {
 	cfg *ipn.ServeConfig
 }
@@ -21,6 +22,7 @@ type serviceOptions struct {
 	Host       string
 }
 
+// Option modifies serviceOptions used to build a Config.
 type Option func(*serviceOptions)
 
 // makeOptions applies a series of Option functions to serviceOptions.

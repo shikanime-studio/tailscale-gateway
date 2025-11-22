@@ -1,3 +1,4 @@
+// Package main starts the Tailscale Gateway controller manager.
 package main
 
 import (
