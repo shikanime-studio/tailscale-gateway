@@ -70,7 +70,7 @@
               license = licenses.asl20;
               mainProgram = "tailscale-gateway-controller";
             };
-        };
+          };
         };
       systems = [
         "x86_64-linux"
