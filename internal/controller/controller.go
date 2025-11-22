@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -19,7 +20,7 @@ type GatewayReconciler struct {
 	Kube    kubernetes.Interface
 	Gateway gateway.Interface
 	Scheme  *runtime.Scheme
-	Cfg     *Config
+	Cfg     *config.Config
 }
 
 const (
@@ -40,7 +41,7 @@ func NewGatewayReconciler(
 	kube kubernetes.Interface,
 	gw gateway.Interface,
 	scheme *runtime.Scheme,
-	cfg *Config,
+	cfg *config.Config,
 ) *GatewayReconciler {
 	return &GatewayReconciler{
 		Kube:    kube,
