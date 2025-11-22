@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/infinity-blackhole/tailscale-gateway/internal/controller"
+	"github.com/shikanime-studio/tailscale-gateway/internal/controller"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
