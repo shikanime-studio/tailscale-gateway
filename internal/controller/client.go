@@ -1,3 +1,5 @@
+// Package controller implements reconciliation helpers for Tailscale Gateway resources.
+// Package controller contains the Kubernetes Gateway controller client helpers.
 package controller
 
 import (
