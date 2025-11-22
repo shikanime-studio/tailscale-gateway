@@ -18,7 +18,7 @@ spec:
       serviceAccountName: tailscale-gateway-controller
       containers:
         - name: controller
-          image: ghcr.io/infinity-blackhole/tailscale-gateway/controller
+          image: ghcr.io/shikanime-studio/tailscale-gateway/controller
           env:
             - name: TS_AUTHKEY
               valueFrom:

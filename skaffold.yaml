@@ -4,7 +4,7 @@ metadata:
   name: tailscale-gateway
 build:
   artifacts:
-    - image: ghcr.io/infinity-blackhole/tailscale-gateway/controller
+    - image: ghcr.io/shikanime-studio/tailscale-gateway/controller
       ko:
         dependencies:
           paths:

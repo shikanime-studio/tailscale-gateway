@@ -1,4 +1,4 @@
-module github.com/infinity-blackhole/tailscale-gateway
+module github.com/shikanime-studio/tailscale-gateway
 
 go 1.25.3
 
