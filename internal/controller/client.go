@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/shikanime-studio/tailscale-gateway/internal/controller/caddyconfig"
 	"github.com/shikanime-studio/tailscale-gateway/internal/controller/tailscaleconfig"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -131,17 +130,6 @@ func (c *Client) EnsureDaemonSet(
 												WithMountPath("/etc/tailscaled/services.hujson").
 												WithSubPath("services.hujson"),
 										),
-									applycorev1.Container().
-										WithName("caddy").
-										WithImage(c.Cfg.GetProxyImage()).
-										WithCommand("caddy").
-										WithArgs("run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile").
-										WithVolumeMounts(
-											applycorev1.VolumeMount().
-												WithName("caddy-config").
-												WithMountPath("/etc/caddy/Caddyfile").
-												WithSubPath("Caddyfile"),
-										),
 								).
 								WithVolumes(
 									applycorev1.Volume().
@@ -150,13 +138,6 @@ func (c *Client) EnsureDaemonSet(
 											applycorev1.ConfigMapVolumeSource().
 												WithName(gateway.Name).
 												WithItems(applycorev1.KeyToPath().WithKey("services.hujson").WithPath("services.hujson")),
-										),
-									applycorev1.Volume().
-										WithName("caddy-config").
-										WithConfigMap(
-											applycorev1.ConfigMapVolumeSource().
-												WithName(caddyconfig.ConfigMapName(gateway)).
-												WithItems(applycorev1.KeyToPath().WithKey("Caddyfile").WithPath("Caddyfile")),
 										),
 								),
 						),
@@ -241,15 +222,6 @@ func (c *Client) Ensure(
 		return err
 	}
 
-	caddyCfg, err := caddyconfig.NewConfig(
-		gateway,
-		caddyconfig.WithHTTPRoutes(routes),
-		caddyconfig.WithHost(c.Cfg.GetCertDomain()),
-	)
-	if err != nil {
-		return err
-	}
-
 	if err := c.EnsureRBAC(ctx, gateway, c.ServiceAccountName(gateway)); err != nil {
 		return err
 	}
@@ -257,9 +229,6 @@ func (c *Client) Ensure(
 		return err
 	}
 	if err := c.UpdateConfig(ctx, gateway, gateway.Name, ds.ObjectMeta.Labels, tsCfg); err != nil {
-		return err
-	}
-	if err := c.UpdateCaddyConfig(ctx, gateway, caddyconfig.ConfigMapName(gateway), ds.ObjectMeta.Labels, caddyCfg); err != nil {
 		return err
 	}
 	logger.Info("daemon set ensured", "gateway", gateway.Name)
@@ -340,37 +309,6 @@ func (c *Client) EnsureSecret(
 	_, err := c.Kube.CoreV1().
 		Secrets(gateway.Namespace).
 		Apply(ctx, secApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
-	return err
-}
-
-// UpdateCaddyConfig ensures the proxy Caddy JSON ConfigMap exists and is up to date.
-func (c *Client) UpdateCaddyConfig(
-	ctx context.Context,
-	gateway *gatewayv1.Gateway,
-	cmName string,
-	labels map[string]string,
-	cfg *caddyconfig.Config,
-) error {
-	b, merr := caddyconfig.Marshal(cfg)
-	if merr != nil {
-		return merr
-	}
-	caddyfile := string(b)
-
-	owner := applymetav1.OwnerReference().
-		WithAPIVersion("gateway.networking.k8s.io/v1").
-		WithKind("Gateway").
-		WithName(gateway.Name).
-		WithUID(gateway.UID)
-
-	cmApply := applycorev1.ConfigMap(cmName, gateway.Namespace).
-		WithLabels(labels).
-		WithData(map[string]string{"Caddyfile": caddyfile}).
-		WithOwnerReferences(owner)
-
-	_, err := c.Kube.CoreV1().
-		ConfigMaps(gateway.Namespace).
-		Apply(ctx, cmApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
 	return err
 }
 

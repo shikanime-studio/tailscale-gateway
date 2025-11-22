@@ -114,12 +114,34 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 								if cfg.cfg.Services[svcName].Web[addr].Handlers == nil {
 									cfg.cfg.Services[svcName].Web[addr].Handlers = map[string]*ipn.HTTPHandler{}
 								}
-								if _, ok := cfg.cfg.Services[svcName].Web[addr].Handlers["/"]; !ok {
-									cfg.cfg.Services[svcName].Web[addr].Handlers["/"] = &ipn.HTTPHandler{
-										Proxy: "http://127.0.0.1:80",
-									}
-								}
 								for _, rule := range hr.Spec.Rules {
+									// Determine upstream from first valid backendRef
+									var upstream string
+									for _, br := range rule.BackendRefs {
+										if br.Port == nil {
+											continue
+										}
+										ns := hr.Namespace
+										if br.Namespace != nil {
+											ns = string(*br.Namespace)
+										}
+										upstream = fmt.Sprintf(
+											"http://%s.%s:%d",
+											br.Name,
+											ns,
+											*br.Port,
+										)
+										break
+									}
+									if upstream == "" {
+										continue
+									}
+									if len(rule.Matches) == 0 {
+										cfg.cfg.Services[svcName].Web[addr].Handlers["/"] = &ipn.HTTPHandler{
+											Proxy: upstream,
+										}
+										continue
+									}
 									for _, match := range rule.Matches {
 										if match.Path == nil {
 											continue
@@ -138,10 +160,8 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 										if path == "" {
 											continue
 										}
-										if _, ok := cfg.cfg.Services[svcName].Web[addr].Handlers[path]; !ok {
-											cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{
-												Proxy: "http://127.0.0.1:80",
-											}
+										cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{
+											Proxy: upstream,
 										}
 									}
 								}
@@ -158,10 +178,27 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 									if cfg.cfg.Services[svcName].Web[addr].Handlers == nil {
 										cfg.cfg.Services[svcName].Web[addr].Handlers = map[string]*ipn.HTTPHandler{}
 									}
-									if _, ok := cfg.cfg.Services[svcName].Web[addr].Handlers["/"]; !ok {
-										cfg.cfg.Services[svcName].Web[addr].Handlers["/"] = &ipn.HTTPHandler{Proxy: "http://127.0.0.1:80"}
-									}
 									for _, rule := range hr.Spec.Rules {
+										// Determine upstream from first valid backendRef
+										var upstream string
+										for _, br := range rule.BackendRefs {
+											if br.Port == nil {
+												continue
+											}
+											ns := hr.Namespace
+											if br.Namespace != nil {
+												ns = string(*br.Namespace)
+											}
+											upstream = fmt.Sprintf("http://%s.%s:%d", br.Name, ns, *br.Port)
+											break
+										}
+										if upstream == "" {
+											continue
+										}
+										if len(rule.Matches) == 0 {
+											cfg.cfg.Services[svcName].Web[addr].Handlers["/"] = &ipn.HTTPHandler{Proxy: upstream}
+											continue
+										}
 										for _, match := range rule.Matches {
 											if match.Path == nil {
 												continue
@@ -180,9 +217,7 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 											if path == "" {
 												continue
 											}
-											if _, ok := cfg.cfg.Services[svcName].Web[addr].Handlers[path]; !ok {
-												cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{Proxy: "http://127.0.0.1:80"}
-											}
+											cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{Proxy: upstream}
 										}
 									}
 								}

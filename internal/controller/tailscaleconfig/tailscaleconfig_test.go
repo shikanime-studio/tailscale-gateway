@@ -72,13 +72,13 @@ func TestMarshal_WithRouteOptions(t *testing.T) {
 		t.Fatalf("expected TCP 8081 HTTP true")
 	}
 
-	// Web entries exist and proxy to localhost:80
+	// Web entries exist and proxy to the backend service
 	if len(svc.Web) == 0 {
 		t.Fatalf("expected Web entries")
 	}
 	found := false
 	for _, w := range svc.Web {
-		if h, ok := w.Handlers["/"]; ok && h.Proxy == "http://127.0.0.1:80" {
+		if h, ok := w.Handlers["/"]; ok && h.Proxy == "http://svc.default:8080" {
 			found = true
 			break
 		}
@@ -147,10 +147,10 @@ func TestMarshal_HandlersWithPathMatches(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected service key svc:test-gw")
 	}
-	// Assert at least one web address has the prefix handler
+	// Assert at least one web address has the prefix handler pointing to backend
 	found := false
 	for _, w := range svc.Web {
-		if h, ok := w.Handlers[prefix]; ok && h.Proxy == "http://127.0.0.1:80" {
+		if h, ok := w.Handlers[prefix]; ok && h.Proxy == "http://svc.default:8080" {
 			found = true
 			break
 		}
@@ -226,7 +226,7 @@ func TestMarshal_IgnoresNonPrefixPathMatches(t *testing.T) {
 	hasPrefix := false
 	hasExact := false
 	for _, w := range svc.Web {
-		if _, ok := w.Handlers[prefix]; ok {
+		if h, ok := w.Handlers[prefix]; ok && h.Proxy == "http://svc.default:8080" {
 			hasPrefix = true
 		}
 		if _, ok := w.Handlers[exact]; ok {
