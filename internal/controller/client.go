@@ -38,6 +38,17 @@ func NewClient(
 	return &Client{kube: kube, gateway: gw, scheme: scheme, cfg: cfg}
 }
 
+// SelectorLabels returns the labels to use for the proxy DaemonSet selector.
+func (c *Client) SelectorLabels(gateway *gatewayv1.Gateway) map[string]string {
+	selectorLabels := gateway.Labels
+	if selectorLabels == nil {
+		selectorLabels = make(map[string]string)
+	}
+	selectorLabels["app.kubernetes.io/name"] = "tailscale-gateway"
+	selectorLabels["app.kubernetes.io/instance"] = gateway.Name
+	return selectorLabels
+}
+
 // EnsureDaemonSet constructs and ensures the proxy DaemonSet exists and is current.
 func (c *Client) EnsureDaemonSet(
 	ctx context.Context,
@@ -45,12 +56,7 @@ func (c *Client) EnsureDaemonSet(
 	advertiseCmd []string,
 	drainCmd []string,
 ) error {
-	labels := c.Labels(gateway)
-
-	selectorLabels := map[string]string{
-		"app.kubernetes.io/name":     "tailscale-gateway",
-		"app.kubernetes.io/instance": gateway.Name,
-	}
+	selectorLabels := c.SelectorLabels(gateway)
 
 	owner := applymetav1.OwnerReference().
 		WithAPIVersion("gateway.networking.k8s.io/v1").
@@ -59,14 +65,14 @@ func (c *Client) EnsureDaemonSet(
 		WithUID(gateway.UID)
 
 	dsApply := applyappsv1.DaemonSet(gateway.Name, gateway.Namespace).
-		WithLabels(labels).
+		WithLabels(gateway.Labels).
 		WithOwnerReferences(owner).
 		WithSpec(
 			applyappsv1.DaemonSetSpec().
 				WithSelector(applymetav1.LabelSelector().WithMatchLabels(selectorLabels)).
 				WithTemplate(
 					applycorev1.PodTemplateSpec().
-						WithLabels(labels).
+						WithLabels(selectorLabels).
 						WithSpec(
 							applycorev1.PodSpec().
 								WithServiceAccountName(gateway.Name).
@@ -221,7 +227,7 @@ func (c *Client) Ensure(
 	if err := c.EnsureSecret(ctx, gateway, gateway.Name); err != nil {
 		return err
 	}
-	if err := c.UpdateConfig(ctx, gateway, gateway.Name, c.Labels(gateway), tsCfg); err != nil {
+	if err := c.UpdateConfig(ctx, gateway, gateway.Name, tsCfg); err != nil {
 		return err
 	}
 	logger.Info("daemon set ensured", "gateway", gateway.Name)
@@ -234,7 +240,6 @@ func (c *Client) EnsureServiceAccount(
 	gateway *gatewayv1.Gateway,
 	saName string,
 ) error {
-	labels := c.Labels(gateway)
 	owner := applymetav1.OwnerReference().
 		WithAPIVersion("gateway.networking.k8s.io/v1").
 		WithKind("Gateway").
@@ -242,7 +247,7 @@ func (c *Client) EnsureServiceAccount(
 		WithUID(gateway.UID)
 
 	saApply := applycorev1.ServiceAccount(saName, gateway.Namespace).
-		WithLabels(labels).
+		WithLabels(gateway.Labels).
 		WithOwnerReferences(owner)
 
 	_, err := c.kube.CoreV1().
@@ -257,7 +262,6 @@ func (c *Client) EnsureRBAC(
 	gateway *gatewayv1.Gateway,
 	saName string,
 ) error {
-	labels := c.Labels(gateway)
 	if saErr := c.EnsureServiceAccount(ctx, gateway, saName); saErr != nil {
 		return saErr
 	}
@@ -270,7 +274,7 @@ func (c *Client) EnsureRBAC(
 		WithUID(gateway.UID)
 
 	crbApply := applyrbacv1.ClusterRoleBinding(crbName).
-		WithLabels(labels).
+		WithLabels(gateway.Labels).
 		WithOwnerReferences(owner).
 		WithRoleRef(applyrbacv1.RoleRef().WithAPIGroup("rbac.authorization.k8s.io").WithKind("ClusterRole").WithName("tailscale-gateway-proxy")).
 		WithSubjects(applyrbacv1.Subject().WithKind("ServiceAccount").WithName(saName).WithNamespace(gateway.Namespace))
@@ -287,7 +291,6 @@ func (c *Client) EnsureSecret(
 	gateway *gatewayv1.Gateway,
 	secretName string,
 ) error {
-	labels := c.Labels(gateway)
 	owner := applymetav1.OwnerReference().
 		WithAPIVersion("gateway.networking.k8s.io/v1").
 		WithKind("Gateway").
@@ -300,7 +303,7 @@ func (c *Client) EnsureSecret(
 	}
 
 	secApply := applycorev1.Secret(secretName, gateway.Namespace).
-		WithLabels(labels).
+		WithLabels(gateway.Labels).
 		WithType(corev1.SecretTypeOpaque).
 		WithStringData(stringData).
 		WithOwnerReferences(owner)
@@ -316,7 +319,6 @@ func (c *Client) UpdateConfig(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	cmName string,
-	labels map[string]string,
 	cfg *tailscaleconfig.Config,
 ) error {
 	b, merr := tailscaleconfig.Marshal(cfg)
@@ -332,7 +334,7 @@ func (c *Client) UpdateConfig(
 		WithUID(gateway.UID)
 
 	cmApply := applycorev1.ConfigMap(cmName, gateway.Namespace).
-		WithLabels(labels).
+		WithLabels(gateway.Labels).
 		WithData(map[string]string{"services.hujson": servicesConfig}).
 		WithOwnerReferences(owner)
 
@@ -340,15 +342,6 @@ func (c *Client) UpdateConfig(
 		ConfigMaps(gateway.Namespace).
 		Apply(ctx, cmApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
 	return err
-}
-
-func (c *Client) Labels(gateway *gatewayv1.Gateway) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":       "tailscale-gateway",
-		"app.kubernetes.io/instance":   gateway.Name,
-		"app.kubernetes.io/part-of":    "tailscale-gateway",
-		"app.kubernetes.io/managed-by": "tailscale-gateway-controller",
-	}
 }
 
 // UpdateGatewayStatus updates the Gateway status conditions
