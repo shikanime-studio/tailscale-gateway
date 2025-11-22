@@ -14,8 +14,8 @@ jobs:
       - uses: shikanime-studio/setup-nix-action@v1
         with:
           github-token: ${{ steps.createGithubAppToken.outputs.token }}
-      - name: Check Nix Flake
-        run: nix flake check --accept-flake-config --all-systems --impure
+      - uses: shikanime-studio/direnv-action@v1
+      - run: nix run nix flake check --accept-flake-config --all-systems --impure
 name: Check
 "on":
   pull_request:
