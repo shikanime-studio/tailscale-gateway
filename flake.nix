@@ -54,6 +54,19 @@
               pkgs.sops
             ];
           };
+
+          packages.default = pkgs.buildGoModule {
+            pname = "tailscale-gateway";
+            version = "v0.1.0";
+            src = pkgs.lib.cleanSource ./.;
+            subPackages = [ "cmd/controller" ];
+            vendorHash = "sha256-TrzjYQJMZxW907rpoRMmtJgTIbUC/OMNJzXXlQjcPb4=";
+            meta = with pkgs.lib; {
+              description = "Tailscale Gateway";
+              homepage = "https://github.com/shikanime-studio/tailscale-gateway";
+              license = licenses.asl20;
+            };
+        };
         };
       systems = [
         "x86_64-linux"
