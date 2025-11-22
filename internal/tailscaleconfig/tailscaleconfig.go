@@ -146,9 +146,9 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 										if path == "" {
 											continue
 										}
-										cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{
-											Proxy: fmt.Sprintf("%s%s", upstream, path),
-										}
+                                        cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{
+                                            Proxy: upstream,
+                                        }
 									}
 								}
 							} else {
@@ -192,7 +192,7 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 											if path == "" {
 												continue
 											}
-											cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{Proxy: fmt.Sprintf("%s%s", upstream, path)}
+                                            cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{Proxy: upstream}
 										}
 									}
 								}
