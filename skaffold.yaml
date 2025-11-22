@@ -16,7 +16,7 @@ build:
         fromImage: cgr.dev/chainguard/glibc-dynamic
 profiles:
   - name: default
-    manifest:
+    manifests:
       kustomize:
         paths:
           - manifests/gateway/base
