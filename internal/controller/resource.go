@@ -19,31 +19,32 @@ import (
 	applyrbacv1 "k8s.io/client-go/applyconfigurations/rbac/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gateway "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 )
 
-// Client provides high-level helpers around Kubernetes and Gateway clients.
-type Client struct {
+// ResourceManager provides high-level helpers around Kubernetes and Gateway clients.
+type ResourceManager struct {
 	kube    kubernetes.Interface
 	gateway gateway.Interface
 	scheme  *runtime.Scheme
 	cfg     *config.Config
 }
 
-// NewClient constructs a Client from kube and gateway clientsets.
-func NewClient(
+// NewResourceManager constructs a ResourceManager from kube and gateway clientsets.
+func NewResourceManager(
 	kube kubernetes.Interface,
 	gw gateway.Interface,
 	scheme *runtime.Scheme,
 	cfg *config.Config,
-) *Client {
-	return &Client{kube: kube, gateway: gw, scheme: scheme, cfg: cfg}
+) *ResourceManager {
+	return &ResourceManager{kube: kube, gateway: gw, scheme: scheme, cfg: cfg}
 }
 
 // SelectorLabels returns the labels to use for the proxy DaemonSet selector.
-func (c *Client) SelectorLabels(gateway *gatewayv1.Gateway) map[string]string {
+func (c *ResourceManager) SelectorLabels(gateway *gatewayv1.Gateway) map[string]string {
 	selectorLabels := gateway.Labels
 	if selectorLabels == nil {
 		selectorLabels = make(map[string]string)
@@ -54,7 +55,7 @@ func (c *Client) SelectorLabels(gateway *gatewayv1.Gateway) map[string]string {
 }
 
 // EnsureDaemonSet constructs and ensures the proxy DaemonSet exists and is current.
-func (c *Client) EnsureDaemonSet(
+func (c *ResourceManager) EnsureDaemonSet(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	advertiseCmd []string,
@@ -97,8 +98,19 @@ func (c *Client) EnsureDaemonSet(
 													),
 												),
 											applycorev1.EnvVar().
+												WithName("GATEWAY_NAME").
+												WithValue(gateway.Name),
+											applycorev1.EnvVar().
+												WithName("GATEWAY_NS").
+												WithValueFrom(
+													applycorev1.EnvVarSource().WithFieldRef(
+														applycorev1.ObjectFieldSelector().
+															WithFieldPath("metadata.namespace"),
+													),
+												),
+											applycorev1.EnvVar().
 												WithName("TS_HOSTNAME").
-												WithValue("$(NODE_NAME)"),
+												WithValue("$(GATEWAY_NS)-$(GATEWAY_NAME)-$(NODE_NAME)"),
 											applycorev1.EnvVar().
 												WithName("TS_KUBE_SECRET").
 												WithValue(gateway.Name),
@@ -183,8 +195,8 @@ func (c *Client) EnsureDaemonSet(
 	return nil
 }
 
-// GetHTTPRoutesForGateway gets all HTTPRoutes that reference this Gateway
-func (c *Client) GetHTTPRoutesForGateway(
+// GetHTTPRoutesForGateway gets all HTTPRoutes that reference this Gateway.
+func (c *ResourceManager) GetHTTPRoutesForGateway(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 ) ([]gatewayv1.HTTPRoute, error) {
@@ -209,8 +221,8 @@ func (c *Client) GetHTTPRoutesForGateway(
 	return matching, nil
 }
 
-// Ensure manages the Tailscale proxy servers for the Gateway
-func (c *Client) Ensure(
+// Ensure manages the Tailscale proxy servers for the Gateway.
+func (c *ResourceManager) Ensure(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 ) error {
@@ -237,17 +249,17 @@ func (c *Client) Ensure(
 		return err
 	}
 
-	if err := c.EnsureDaemonSet(ctx, gateway, advertiseCmd, drainCmd); err != nil {
+	if err = c.EnsureDaemonSet(ctx, gateway, advertiseCmd, drainCmd); err != nil {
 		return err
 	}
 
-	if err := c.EnsureRBAC(ctx, gateway, gateway.Name); err != nil {
+	if err = c.EnsureRBAC(ctx, gateway, gateway.Name); err != nil {
 		return err
 	}
-	if err := c.EnsureSecret(ctx, gateway, gateway.Name); err != nil {
+	if err = c.EnsureSecret(ctx, gateway, gateway.Name); err != nil {
 		return err
 	}
-	if err := c.UpdateConfig(ctx, gateway, gateway.Name, tsCfg); err != nil {
+	if err = c.UpdateConfig(ctx, gateway, gateway.Name, tsCfg); err != nil {
 		return err
 	}
 	caddyCfg, err := caddyconfig.NewConfig(
@@ -266,7 +278,7 @@ func (c *Client) Ensure(
 }
 
 // EnsureServiceAccount creates the ServiceAccount if it does not exist.
-func (c *Client) EnsureServiceAccount(
+func (c *ResourceManager) EnsureServiceAccount(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	saName string,
@@ -288,7 +300,7 @@ func (c *Client) EnsureServiceAccount(
 }
 
 // EnsureRBAC ensures a ClusterRoleBinding grants the ServiceAccount access.
-func (c *Client) EnsureRBAC(
+func (c *ResourceManager) EnsureRBAC(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	saName string,
@@ -317,7 +329,7 @@ func (c *Client) EnsureRBAC(
 }
 
 // EnsureSecret ensures the Secret with optional auth key exists and is current.
-func (c *Client) EnsureSecret(
+func (c *ResourceManager) EnsureSecret(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	secretName string,
@@ -346,7 +358,7 @@ func (c *Client) EnsureSecret(
 }
 
 // UpdateConfig ensures the services ConfigMap exists and is up to date.
-func (c *Client) UpdateConfig(
+func (c *ResourceManager) UpdateConfig(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	cmName string,
@@ -376,7 +388,7 @@ func (c *Client) UpdateConfig(
 }
 
 // UpdateCaddyConfig ensures the Caddyfile ConfigMap exists and is up to date.
-func (c *Client) UpdateCaddyConfig(
+func (c *ResourceManager) UpdateCaddyConfig(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	cmName string,
@@ -405,8 +417,8 @@ func (c *Client) UpdateCaddyConfig(
 	return err
 }
 
-// UpdateGatewayStatus updates the Gateway status conditions
-func (c *Client) UpdateGatewayStatus(
+// UpdateGatewayStatus updates the Gateway status conditions.
+func (c *ResourceManager) UpdateGatewayStatus(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	ready bool,
@@ -486,5 +498,27 @@ func (c *Client) UpdateGatewayStatus(
 		return fmt.Errorf("failed to update Gateway status: %w", err)
 	}
 
+	return nil
+}
+
+// AddFinalizer ensures the given finalizer is present on the Gateway resource.
+func (c *ResourceManager) AddFinalizer(ctx context.Context, gw *gatewayv1.Gateway, finalizer string) error {
+	if !controllerutil.ContainsFinalizer(gw, finalizer) {
+		controllerutil.AddFinalizer(gw, finalizer)
+		if _, err := c.gateway.GatewayV1().Gateways(gw.Namespace).Update(ctx, gw, metav1.UpdateOptions{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RemoveFinalizer removes the given finalizer from the Gateway resource.
+func (c *ResourceManager) RemoveFinalizer(ctx context.Context, gw *gatewayv1.Gateway, finalizer string) error {
+	if controllerutil.ContainsFinalizer(gw, finalizer) {
+		controllerutil.RemoveFinalizer(gw, finalizer)
+		if _, err := c.gateway.GatewayV1().Gateways(gw.Namespace).Update(ctx, gw, metav1.UpdateOptions{}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
