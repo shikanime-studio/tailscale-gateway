@@ -15,8 +15,12 @@ spec:
             type: PathPrefix
             value: /api
       backendRefs:
-        - name: demo-api
+        - name: demo-api-v1
           port: 80
+          weight: 80
+        - name: demo-api-v2
+          port: 80
+          weight: 20
     - backendRefs:
-        - name: demo-front
+        - name: demo
           port: 80

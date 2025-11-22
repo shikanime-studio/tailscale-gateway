@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: demo-front
+  name: demo
   namespace: tailscale-gateway-demo
   labels:
-    app: demo-front
+    app: demo
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: demo-front
+      app: demo
   template:
     metadata:
       labels:
-        app: demo-front
+        app: demo
     spec:
       containers:
         - name: caddy
@@ -28,24 +28,24 @@ spec:
       volumes:
         - name: caddy-config
           configMap:
-            name: demo-front
+            name: demo
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: demo-api
+  name: demo-api-v1
   namespace: tailscale-gateway-demo
   labels:
-    app: demo-api
+    app: demo-api-v1
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: demo-api
+      app: demo-api-v1
   template:
     metadata:
       labels:
-        app: demo-api
+        app: demo-api-v1
     spec:
       containers:
         - name: caddy
@@ -60,4 +60,36 @@ spec:
       volumes:
         - name: caddy-config
           configMap:
-            name: demo-api
+            name: demo-api-v1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-api-v2
+  namespace: tailscale-gateway-demo
+  labels:
+    app: demo-api-v2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-api-v2
+  template:
+    metadata:
+      labels:
+        app: demo-api-v2
+    spec:
+      containers:
+        - name: caddy
+          image: caddy:latest
+          ports:
+            - name: http
+              containerPort: 80
+          volumeMounts:
+            - name: caddy-config
+              mountPath: /etc/caddy/Caddyfile
+              subPath: Caddyfile
+      volumes:
+        - name: caddy-config
+          configMap:
+            name: demo-api-v2

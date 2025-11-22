@@ -7,11 +7,15 @@ resources:
   - svc.yaml
   - deploy.yaml
 configMapGenerator:
-  - name: demo-front
+  - name: demo
     namespace: tailscale-gateway-demo
     files:
-      - front/Caddyfile
-  - name: demo-api
+      - demo/Caddyfile
+  - name: demo-api-v1
     namespace: tailscale-gateway-demo
     files:
-      - api/Caddyfile
+      - demo-api-v1/Caddyfile
+  - name: demo-api-v2
+    namespace: tailscale-gateway-demo
+    files:
+      - demo-api-v2/Caddyfile

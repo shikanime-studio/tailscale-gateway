@@ -5,8 +5,7 @@ metadata:
   namespace: tailscale-gateway-demo
 spec:
   selector:
-    app.kubernetes.io/name: demo
-    app.kubernetes.io/instance: demo
+    app: demo
   ports:
     - port: 80
       targetPort: http
@@ -14,13 +13,28 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: demo-api
+  name: demo-api-v1
   namespace: tailscale-gateway-demo
   labels:
-    app: demo-api
+    app: demo-api-v1
 spec:
   selector:
-    app: demo-api
+    app: demo-api-v1
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-api-v2
+  namespace: tailscale-gateway-demo
+  labels:
+    app: demo-api-v2
+spec:
+  selector:
+    app: demo-api-v2
   ports:
     - name: http
       port: 80
