@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	"github.com/shikanime-studio/tailscale-gateway/internal/tailscaleconfig"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -25,7 +26,7 @@ type Client struct {
 	kube    kubernetes.Interface
 	gateway gateway.Interface
 	scheme  *runtime.Scheme
-	cfg     *Config
+	cfg     *config.Config
 }
 
 // NewClient constructs a Client from kube and gateway clientsets.
@@ -33,7 +34,7 @@ func NewClient(
 	kube kubernetes.Interface,
 	gw gateway.Interface,
 	scheme *runtime.Scheme,
-	cfg *Config,
+	cfg *config.Config,
 ) *Client {
 	return &Client{kube: kube, gateway: gw, scheme: scheme, cfg: cfg}
 }
