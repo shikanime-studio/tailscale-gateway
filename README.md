@@ -16,8 +16,28 @@ to cluster `Service`s discovered from `HTTPRoute`s.
 ### Prerequisites
 
 - A Kubernetes cluster and `kubectl`
-- Gateway API CRDs (`v1.0.0`)
 - Tailscale account and auth key
+
+### Install Gateway API CRDs
+
+Install the Gateway API CRDs from the Standard channel:
+
+```bash
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
+```
+
+Alternatively, install the Experimental channel:
+
+```bash
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/experimental-install.yaml
+```
+
+Verify installation:
+
+```bash
+kubectl get crd gateways.gateway.networking.k8s.io
+kubectl get crd httproutes.gateway.networking.k8s.io
+```
 
 ### Option A: Kustomize
 
@@ -33,10 +53,18 @@ kubectl -n tailscale-system create secret generic tailscale-gateway-controller \
 
 ```bash
 # Requires ko and skaffold
+skaffold dev -p default
+```
+
+Or deploy the demo profile:
+
+```bash
+# Option B: Skaffold (demo profile)
 skaffold dev -p demo
 ```
 
-The demo profile builds the controller image with ko and deploys `manifests/gateway/overlays/demo`.
+The demo profile builds the controller image with ko and deploys
+`manifests/gateway/overlays/demo`.
 
 ## Configuration
 
@@ -126,6 +154,6 @@ go build ./cmd/controller
 # Run tests
 go test ./...
 
-# Build and deploy demo with ko + skaffold
-skaffold dev -p demo
+# Build and deploy with ko + skaffold
+skaffold dev -p default
 ```
