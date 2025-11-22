@@ -61,10 +61,14 @@
             src = pkgs.lib.cleanSource ./.;
             subPackages = [ "cmd/controller" ];
             vendorHash = "sha256-TrzjYQJMZxW907rpoRMmtJgTIbUC/OMNJzXXlQjcPb4=";
+            postInstall = ''
+              install -Dm755 $out/bin/controller $out/bin/tailscale-gateway-controller
+            '';
             meta = with pkgs.lib; {
               description = "Tailscale Gateway";
               homepage = "https://github.com/shikanime-studio/tailscale-gateway";
               license = licenses.asl20;
+              mainProgram = "tailscale-gateway-controller";
             };
         };
         };
