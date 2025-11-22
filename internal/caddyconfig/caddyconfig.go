@@ -1,3 +1,4 @@
+// Package caddyconfig models and generates Caddyfile configuration from Gateway API resources.
 package caddyconfig
 
 import (
@@ -6,24 +7,28 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// Config represents a Caddyfile configuration consisting of multiple sites.
 type Config struct {
-	Sites []Site
+    Sites []Site
 }
 
+// Site represents a single Caddy virtual host and its upstreams and routes.
 type Site struct {
-	Address   string
-	Upstreams []string
-	Routes    []Route
+    Address   string
+    Upstreams []string
+    Routes    []Route
 }
 
+// Route describes path-based routing to upstream backends.
 type Route struct {
-	Paths     []PathMatch
-	Upstreams []string
+    Paths     []PathMatch
+    Upstreams []string
 }
 
+// PathMatch specifies a path match type and value.
 type PathMatch struct {
-	Type  string
-	Value string
+    Type  string
+    Value string
 }
 
 // Marshal serializes the Config to a Caddyfile by calling Marshal.
@@ -39,6 +44,7 @@ type options struct {
 	Host       string
 }
 
+// Option modifies options used to build a Caddyfile Config.
 type Option func(*options)
 
 // makeOptions applies a series of Option functions to options.
