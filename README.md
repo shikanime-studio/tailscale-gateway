@@ -5,16 +5,15 @@ Kubernetes controller that integrates the Gateway API with Tailscale. For each `
 ## Overview
 
 - Reconciles `Gateway` resources and discovers referenced `HTTPRoute`s
-- Generates Tailscale Serve HUJSON config and a Caddy reverse_proxy config
-- Applies `ConfigMap`s and a DaemonSet with `tailscale` + `caddy` containers
+- Generates Tailscale Serve HUJSON config to proxy directly to Kubernetes `Service`s
+- Applies `ConfigMap` and a DaemonSet with a `tailscale` container
 - Updates `Gateway` status and listener conditions; publishes a hostname address
 
 ## Features
 
 - Gateway API v1: HTTP/HTTPS listeners
 - HTTPRoute backend discovery across namespaces via `parentRefs`
-- Reverse proxy to `service.namespace:port` endpoints via Caddy
-- Simple round‑robin balancing across multiple backends
+- Direct proxy to `service.namespace:port` endpoints via Tailscale Serve
 - Status conditions for Gateway and Listeners; hostname `ns-name.ts.net` when ready
 
 ## Install
@@ -50,7 +49,6 @@ Environment variables consumed by the controller:
 
 - `METRICS_BIND_ADDRESS` (default `:8080`)
 - `HEALTH_PROBE_BIND_ADDRESS` (default `:8081`)
-- `PROXY_IMAGE` (default `caddy:latest`)
 - `TS_IMAGE` (default `tailscale/tailscale:latest`)
 - `TS_AUTHKEY` (optional; controller reads and writes `authkey` in Secret)
 
@@ -100,7 +98,6 @@ kubectl apply -k manifests/demo
 
 - DaemonSet `<gateway>-tailscale-gateway` in the Gateway namespace
 - ConfigMap `<gateway>` containing `services.hujson`
-- ConfigMap `<gateway>-caddy-config` containing `Caddyfile`
 - Secret `<gateway>` in the Gateway namespace with key `authkey` (populated if `TS_AUTHKEY` is set)
 
 ## Observability
@@ -122,7 +119,7 @@ kubectl -n <ns> get gateway <name> -o yaml
 kubectl -n <ns> get ds,pods -l app=tailscale-gateway
 
 # Configs
-kubectl -n <ns> get cm <name>-caddy-config <name> -o yaml
+kubectl -n <ns> get cm <name> -o yaml
 ```
 
 ## Development

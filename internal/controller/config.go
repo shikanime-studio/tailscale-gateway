@@ -16,7 +16,6 @@ func New() *Config {
 
 	v.SetDefault("metrics_bind_address", ":8080")
 	v.SetDefault("health_probe_bind_address", ":8081")
-	v.SetDefault("proxy_image", "caddy:latest")
 	v.SetDefault("ts_image", "tailscale/tailscale:latest")
 	v.SetDefault("ts_cert_domain", "")
 
