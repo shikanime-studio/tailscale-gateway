@@ -1,0 +1,5 @@
+:80
+
+header Content-Type application/json
+
+respond "{\"status\": \"ok\"}"
