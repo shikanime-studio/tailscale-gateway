@@ -8,11 +8,11 @@ build:
       ko:
         dependencies:
           paths:
-            - cmd/controller
+            - cmd/tailscale-gateway-controller
             - internal
             - go.mod
             - go.sum
-        dir: ./cmd/controller
+        dir: ./cmd/tailscale-gateway-controller
         fromImage: cgr.dev/chainguard/glibc-dynamic
 profiles:
   - name: default
