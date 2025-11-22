@@ -10,13 +10,13 @@ import (
 
 // Config represents a Caddyfile configuration consisting of multiple sites.
 type Config struct {
-    Sites []Site
+	Sites []Site
 }
 
 // Site represents a single Caddy virtual host and its upstream backends.
 type Site struct {
-    Address   string
-    Upstreams []string
+	Address   string
+	Upstreams []string
 }
 
 // Marshal serializes the Config to a Caddyfile by calling Marshal.
