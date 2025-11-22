@@ -4,16 +4,16 @@ metadata:
   name: demo-front
   namespace: tailscale-gateway-demo
   labels:
-    app: demo-front
+    app.kubernetes.io/name: demo-front
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: demo-front
+      app.kubernetes.io/name: demo-front
   template:
     metadata:
       labels:
-        app: demo-front
+        app.kubernetes.io/name: demo-front
     spec:
       containers:
         - name: caddy
