@@ -15,9 +15,10 @@ func New() (*Config, error) {
 
 	v.SetDefault("metrics_bind_address", ":8080")
 	v.SetDefault("health_probe_bind_address", ":8081")
-	v.SetDefault("ts_image", "tailscale/tailscale:latest")
-	v.SetDefault("ts_cert_domain", "")
+	v.SetDefault("tailscale_image", "tailscale/tailscale:latest")
+	v.SetDefault("tailscale_tailnet", "")
 	v.SetDefault("caddy_image", "caddy:latest")
+	v.SetDefault("tailscale_cert_domain", "")
 
 	if err := v.BindEnv("metrics_bind_address", "METRICS_BIND_ADDRESS"); err != nil {
 		return nil, err
@@ -25,16 +26,16 @@ func New() (*Config, error) {
 	if err := v.BindEnv("health_probe_bind_address", "HEALTH_PROBE_BIND_ADDRESS"); err != nil {
 		return nil, err
 	}
-	if err := v.BindEnv("ts_image", "TS_IMAGE"); err != nil {
+	if err := v.BindEnv("tailscale_image", "TAILSCALE_IMAGE"); err != nil {
 		return nil, err
 	}
-	if err := v.BindEnv("ts_auth_key", "TS_AUTHKEY", "ts_auth_key"); err != nil {
+	if err := v.BindEnv("tailscale_authkey", "TAILSCALE_AUTHKEY"); err != nil {
 		return nil, err
 	}
-	if err := v.BindEnv("ts_cert_domain", "TS_CERT_DOMAIN", "ts_cert_domain"); err != nil {
+	if err := v.BindEnv("tailscale_tailnet", "TAILSCALE_TAILNET"); err != nil {
 		return nil, err
 	}
-	if err := v.BindEnv("caddy_image", "CADDY_IMAGE", "caddy_image"); err != nil {
+	if err := v.BindEnv("caddy_image", "CADDY_IMAGE"); err != nil {
 		return nil, err
 	}
 
@@ -49,14 +50,14 @@ func (c *Config) GetHealthProbeBindAddress() string {
 	return c.v.GetString("health_probe_bind_address")
 }
 
-// GetTSAuthKey returns the optional Tailscale auth key.
-func (c *Config) GetTSAuthKey() string { return c.v.GetString("ts_auth_key") }
+// GetTailscaleAPIKey returns the optional Tailscale API key.
+func (c *Config) GetTailscaleAPIKey() string { return c.v.GetString("tailscale_authkey") }
 
 // GetTailscaleImage returns the tailscale daemon container image.
-func (c *Config) GetTailscaleImage() string { return c.v.GetString("ts_image") }
+func (c *Config) GetTailscaleImage() string { return c.v.GetString("tailscale_image") }
 
-// GetCertDomain returns the optional DNS suffix to append for certificates.
-func (c *Config) GetCertDomain() string { return c.v.GetString("ts_cert_domain") }
+// GetTailscaleTailnet returns the certificate DNS name.
+func (c *Config) GetTailscaleTailnet() string { return c.v.GetString("tailscale_tailnet") }
 
 // GetCaddyImage returns the caddy reverse proxy container image.
 func (c *Config) GetCaddyImage() string { return c.v.GetString("caddy_image") }
