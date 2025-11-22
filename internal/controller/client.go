@@ -40,12 +40,13 @@ func NewClient(
 
 // SelectorLabels returns the labels to use for the proxy DaemonSet selector.
 func (c *Client) SelectorLabels(gateway *gatewayv1.Gateway) map[string]string {
-	selectorLabels := gateway.Labels
-	if selectorLabels == nil {
-		selectorLabels = make(map[string]string)
+	selectorLabels := map[string]string{
+		"app.kubernetes.io/name":     "tailscale-gateway",
+		"app.kubernetes.io/instance": gateway.Name,
 	}
-	selectorLabels["app.kubernetes.io/name"] = "tailscale-gateway"
-	selectorLabels["app.kubernetes.io/instance"] = gateway.Name
+	for k, v := range gateway.Labels {
+		selectorLabels[k] = v
+	}
 	return selectorLabels
 }
 
