@@ -46,6 +46,7 @@
             imports = [
               devlib.devenvModules.shikanime-studio
             ];
+            git-hooks.hooks.staticcheck.enable = false;
             languages.go.enable = true;
             packages = [
               pkgs.ko
