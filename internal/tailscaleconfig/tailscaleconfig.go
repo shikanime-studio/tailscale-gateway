@@ -115,35 +115,7 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 									cfg.cfg.Services[svcName].Web[addr].Handlers = map[string]*ipn.HTTPHandler{}
 								}
 								for _, rule := range hr.Spec.Rules {
-									// Determine upstream; error if multiple backendRefs supported
-									var upstream string
-									valid := 0
-									for _, br := range rule.BackendRefs {
-										if br.Port == nil {
-											continue
-										}
-										ns := hr.Namespace
-										if br.Namespace != nil {
-											ns = string(*br.Namespace)
-										}
-										valid++
-										if valid == 1 {
-											upstream = fmt.Sprintf(
-												"http://%s.%s:%d",
-												br.Name,
-												ns,
-												*br.Port,
-											)
-										}
-									}
-									if valid > 1 {
-										return nil, fmt.Errorf(
-											"multiple BackendRefs in a single rule are not supported",
-										)
-									}
-									if upstream == "" {
-										continue
-									}
+									upstream := fmt.Sprintf("http://127.0.0.1:%d", l.Port)
 									if len(rule.Matches) == 0 {
 										cfg.cfg.Services[svcName].Web[addr].Handlers["/"] = &ipn.HTTPHandler{
 											Proxy: upstream,
@@ -187,28 +159,7 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 										cfg.cfg.Services[svcName].Web[addr].Handlers = map[string]*ipn.HTTPHandler{}
 									}
 									for _, rule := range hr.Spec.Rules {
-										// Determine upstream; error if multiple backendRefs supported
-										var upstream string
-										valid := 0
-										for _, br := range rule.BackendRefs {
-											if br.Port == nil {
-												continue
-											}
-											ns := hr.Namespace
-											if br.Namespace != nil {
-												ns = string(*br.Namespace)
-											}
-											valid++
-											if valid == 1 {
-												upstream = fmt.Sprintf("http://%s.%s:%d", br.Name, ns, *br.Port)
-											}
-										}
-										if valid > 1 {
-											return nil, fmt.Errorf("multiple BackendRefs in a single rule are not supported")
-										}
-										if upstream == "" {
-											continue
-										}
+										upstream := fmt.Sprintf("http://127.0.0.1:%d", l.Port)
 										if len(rule.Matches) == 0 {
 											cfg.cfg.Services[svcName].Web[addr].Handlers["/"] = &ipn.HTTPHandler{Proxy: upstream}
 											continue
