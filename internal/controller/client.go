@@ -22,10 +22,10 @@ import (
 
 // Client provides high-level helpers around Kubernetes and Gateway clients.
 type Client struct {
-	Kube    kubernetes.Interface
-	Gateway gateway.Interface
-	Scheme  *runtime.Scheme
-	Cfg     *Config
+	kube    kubernetes.Interface
+	gateway gateway.Interface
+	scheme  *runtime.Scheme
+	cfg     *Config
 }
 
 // NewClient constructs a Client from kube and gateway clientsets.
@@ -35,7 +35,7 @@ func NewClient(
 	scheme *runtime.Scheme,
 	cfg *Config,
 ) *Client {
-	return &Client{Kube: kube, Gateway: gw, Scheme: scheme, Cfg: cfg}
+	return &Client{kube: kube, gateway: gw, scheme: scheme, cfg: cfg}
 }
 
 // EnsureDaemonSet constructs and ensures the proxy DaemonSet exists and is current.
@@ -65,11 +65,11 @@ func (c *Client) EnsureDaemonSet(
 						WithLabels(labels).
 						WithSpec(
 							applycorev1.PodSpec().
-								WithServiceAccountName(c.ServiceAccountName(gateway)).
+								WithServiceAccountName(gateway.Name).
 								WithContainers(
 									applycorev1.Container().
 										WithName("tailscale").
-										WithImage(c.Cfg.GetTailscaleImage()).
+										WithImage(c.cfg.GetTailscaleImage()).
 										WithEnv(
 											applycorev1.EnvVar().
 												WithName("TS_USERSPACE").
@@ -144,7 +144,7 @@ func (c *Client) EnsureDaemonSet(
 				),
 		)
 
-	applied, err := c.Kube.AppsV1().
+	applied, err := c.kube.AppsV1().
 		DaemonSets(gateway.Namespace).
 		Apply(ctx, dsApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
 	if err != nil {
@@ -153,17 +153,12 @@ func (c *Client) EnsureDaemonSet(
 	return applied, nil
 }
 
-// ServiceAccountName returns the ServiceAccount name used for the Gateway.
-func (c *Client) ServiceAccountName(gateway *gatewayv1.Gateway) string {
-	return fmt.Sprintf("%s-tailscale-gateway", gateway.Name)
-}
-
 // GetHTTPRoutesForGateway gets all HTTPRoutes that reference this Gateway
 func (c *Client) GetHTTPRoutesForGateway(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 ) ([]gatewayv1.HTTPRoute, error) {
-	routesList, err := c.Gateway.GatewayV1().
+	routesList, err := c.gateway.GatewayV1().
 		HTTPRoutes(metav1.NamespaceAll).
 		List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -177,7 +172,6 @@ func (c *Client) GetHTTPRoutesForGateway(
 				if route.Namespace == gateway.Namespace ||
 					(parentRef.Namespace != nil && *parentRef.Namespace == gatewayv1.Namespace(gateway.Namespace)) {
 					matching = append(matching, route)
-					break
 				}
 			}
 		}
@@ -222,7 +216,7 @@ func (c *Client) Ensure(
 		return err
 	}
 
-	if err := c.EnsureRBAC(ctx, gateway, c.ServiceAccountName(gateway)); err != nil {
+	if err := c.EnsureRBAC(ctx, gateway, gateway.Name); err != nil {
 		return err
 	}
 	if err := c.EnsureSecret(ctx, gateway, gateway.Name); err != nil {
@@ -250,7 +244,7 @@ func (c *Client) EnsureServiceAccount(
 	saApply := applycorev1.ServiceAccount(saName, gateway.Namespace).
 		WithOwnerReferences(owner)
 
-	_, err := c.Kube.CoreV1().
+	_, err := c.kube.CoreV1().
 		ServiceAccounts(gateway.Namespace).
 		Apply(ctx, saApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
 	return err
@@ -278,7 +272,7 @@ func (c *Client) EnsureRBAC(
 		WithRoleRef(applyrbacv1.RoleRef().WithAPIGroup("rbac.authorization.k8s.io").WithKind("ClusterRole").WithName("tailscale-gateway-proxy")).
 		WithSubjects(applyrbacv1.Subject().WithKind("ServiceAccount").WithName(saName).WithNamespace(gateway.Namespace))
 
-	_, err := c.Kube.RbacV1().
+	_, err := c.kube.RbacV1().
 		ClusterRoleBindings().
 		Apply(ctx, crbApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
 	return err
@@ -297,7 +291,7 @@ func (c *Client) EnsureSecret(
 		WithUID(gateway.UID)
 
 	stringData := map[string]string{}
-	if v := c.Cfg.GetTSAuthKey(); v != "" {
+	if v := c.cfg.GetTSAuthKey(); v != "" {
 		stringData["authkey"] = v
 	}
 
@@ -306,7 +300,7 @@ func (c *Client) EnsureSecret(
 		WithStringData(stringData).
 		WithOwnerReferences(owner)
 
-	_, err := c.Kube.CoreV1().
+	_, err := c.kube.CoreV1().
 		Secrets(gateway.Namespace).
 		Apply(ctx, secApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
 	return err
@@ -337,7 +331,7 @@ func (c *Client) UpdateConfig(
 		WithData(map[string]string{"services.hujson": servicesConfig}).
 		WithOwnerReferences(owner)
 
-	_, err := c.Kube.CoreV1().
+	_, err := c.kube.CoreV1().
 		ConfigMaps(gateway.Namespace).
 		Apply(ctx, cmApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
 	return err
