@@ -115,7 +115,11 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 									cfg.cfg.Services[svcName].Web[addr].Handlers = map[string]*ipn.HTTPHandler{}
 								}
 								for _, rule := range hr.Spec.Rules {
-									upstream := fmt.Sprintf("http://127.0.0.1:%d", l.Port)
+									upstreamPort := int(l.Port)
+									if l.Protocol == gatewayv1.HTTPSProtocolType {
+										upstreamPort = 80
+									}
+									upstream := fmt.Sprintf("http://127.0.0.1:%d", upstreamPort)
 									if len(rule.Matches) == 0 {
 										cfg.cfg.Services[svcName].Web[addr].Handlers["/"] = &ipn.HTTPHandler{
 											Proxy: upstream,
@@ -141,7 +145,7 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 											continue
 										}
 										cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{
-											Proxy: upstream,
+											Proxy: fmt.Sprintf("%s%s", upstream, path),
 										}
 									}
 								}
@@ -159,7 +163,11 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 										cfg.cfg.Services[svcName].Web[addr].Handlers = map[string]*ipn.HTTPHandler{}
 									}
 									for _, rule := range hr.Spec.Rules {
-										upstream := fmt.Sprintf("http://127.0.0.1:%d", l.Port)
+										upstreamPort := int(l.Port)
+										if l.Protocol == gatewayv1.HTTPSProtocolType {
+											upstreamPort = 80
+										}
+										upstream := fmt.Sprintf("http://127.0.0.1:%d", upstreamPort)
 										if len(rule.Matches) == 0 {
 											cfg.cfg.Services[svcName].Web[addr].Handlers["/"] = &ipn.HTTPHandler{Proxy: upstream}
 											continue
@@ -182,7 +190,7 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 											if path == "" {
 												continue
 											}
-											cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{Proxy: upstream}
+											cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{Proxy: fmt.Sprintf("%s%s", upstream, path)}
 										}
 									}
 								}

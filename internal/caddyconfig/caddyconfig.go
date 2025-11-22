@@ -94,7 +94,12 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 			}
 
 			for _, rrule := range hr.Spec.Rules {
-				ruleUps := []string{}
+				// Collect upstream weights
+				type up struct {
+					addr string
+					w    int32
+				}
+				upsWeighted := []up{}
 				for _, br := range rrule.BackendRefs {
 					if br.Port == nil {
 						continue
@@ -111,8 +116,46 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 							w = 1
 						}
 					}
-					for i := int32(0); i < w; i++ {
-						ruleUps = append(ruleUps, addr)
+					upsWeighted = append(upsWeighted, up{addr: addr, w: w})
+				}
+				// Scale weights down by GCD to avoid excessive duplication
+				ruleUps := []string{}
+				if len(upsWeighted) > 0 {
+					// Compute gcd across weights
+					gcd := upsWeighted[0].w
+					for i := 1; i < len(upsWeighted); i++ {
+						// Euclidean algorithm
+						a, b := gcd, upsWeighted[i].w
+						for b != 0 {
+							a, b = b, a%b
+						}
+						gcd = a
+					}
+					if gcd < 1 {
+						gcd = 1
+					}
+					// Cap total duplicates to a sane limit while keeping ratio
+					const maxTotal = int32(32)
+					var sumScaled int32
+					for _, u := range upsWeighted {
+						sumScaled += u.w / gcd
+					}
+					scale := int32(1)
+					if sumScaled > maxTotal && sumScaled > 0 {
+						// further scale down proportionally
+						scale = (sumScaled + maxTotal - 1) / maxTotal
+						if scale < 1 {
+							scale = 1
+						}
+					}
+					for _, u := range upsWeighted {
+						count := u.w / gcd / scale
+						if count < 1 {
+							count = 1
+						}
+						for i := int32(0); i < count; i++ {
+							ruleUps = append(ruleUps, u.addr)
+						}
 					}
 				}
 				if len(ruleUps) == 0 {
@@ -142,9 +185,7 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 							}
 						}
 						if len(r.Paths) > 0 {
-							for _, u := range ruleUps {
-								r.Upstreams = append(r.Upstreams, u)
-							}
+							r.Upstreams = append(r.Upstreams, ruleUps...)
 							sites[baseAddr].routes = append(sites[baseAddr].routes, r)
 						} else {
 							for _, u := range ruleUps {
@@ -185,9 +226,7 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 								}
 							}
 							if len(r.Paths) > 0 {
-								for _, u := range ruleUps {
-									r.Upstreams = append(r.Upstreams, u)
-								}
+								r.Upstreams = append(r.Upstreams, ruleUps...)
 								sites[hostAddr].routes = append(sites[hostAddr].routes, r)
 							} else {
 								for _, u := range ruleUps {
@@ -221,9 +260,7 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 								}
 							}
 							if len(r.Paths) > 0 {
-								for _, u := range ruleUps {
-									r.Upstreams = append(r.Upstreams, u)
-								}
+								r.Upstreams = append(r.Upstreams, ruleUps...)
 								sites[addr].routes = append(sites[addr].routes, r)
 							} else {
 								for _, u := range ruleUps {
@@ -255,9 +292,7 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 									}
 								}
 								if len(r.Paths) > 0 {
-									for _, u := range ruleUps {
-										r.Upstreams = append(r.Upstreams, u)
-									}
+									r.Upstreams = append(r.Upstreams, ruleUps...)
 									sites[suffixed].routes = append(sites[suffixed].routes, r)
 								} else {
 									for _, u := range ruleUps {

@@ -78,7 +78,7 @@ func TestMarshal_WithRouteOptions(t *testing.T) {
 	}
 	found := false
 	for _, w := range svc.Web {
-		if h, ok := w.Handlers["/"]; ok && h.Proxy == "http://svc.default:8080" {
+		if h, ok := w.Handlers["/"]; ok && h.Proxy == "http://127.0.0.1:80" {
 			found = true
 			break
 		}
@@ -150,7 +150,7 @@ func TestMarshal_HandlersWithPathMatches(t *testing.T) {
 	// Assert at least one web address has the prefix handler pointing to backend
 	found := false
 	for _, w := range svc.Web {
-		if h, ok := w.Handlers[prefix]; ok && h.Proxy == "http://svc.default:8080" {
+		if h, ok := w.Handlers[prefix]; ok && h.Proxy == "http://127.0.0.1:80" {
 			found = true
 			break
 		}
@@ -160,7 +160,7 @@ func TestMarshal_HandlersWithPathMatches(t *testing.T) {
 	}
 }
 
-func TestNewConfig_ErrorsOnMultipleBackendRefs(t *testing.T) {
+func TestNewConfig_AllowsMultipleBackendRefs(t *testing.T) {
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-gw"},
 		Spec: gatewayv1.GatewaySpec{
@@ -200,8 +200,8 @@ func TestNewConfig_ErrorsOnMultipleBackendRefs(t *testing.T) {
 	}
 
 	_, err := NewConfig(gw, WithHTTPRoute(hr))
-	if err == nil {
-		t.Fatalf("expected error on multiple BackendRefs, got nil")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -271,7 +271,7 @@ func TestMarshal_IgnoresNonPrefixPathMatches(t *testing.T) {
 	hasPrefix := false
 	hasExact := false
 	for _, w := range svc.Web {
-		if h, ok := w.Handlers[prefix]; ok && h.Proxy == "http://svc.default:8080" {
+		if h, ok := w.Handlers[prefix]; ok && h.Proxy == "http://127.0.0.1:80" {
 			hasPrefix = true
 		}
 		if _, ok := w.Handlers[exact]; ok {

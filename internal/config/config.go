@@ -1,16 +1,14 @@
-package controller
+package config
 
 import (
 	"github.com/spf13/viper"
 )
 
 // Config wraps application configuration and environment bindings.
-type Config struct {
-	v *viper.Viper
-}
+type Config struct{ v *viper.Viper }
 
 // New constructs a new Config with defaults and environment bindings.
-func New() *Config {
+func New() (*Config, error) {
 	v := viper.New()
 	v.AutomaticEnv()
 
@@ -20,20 +18,30 @@ func New() *Config {
 	v.SetDefault("ts_cert_domain", "")
 	v.SetDefault("caddy_image", "caddy:latest")
 
-	v.BindEnv("metrics_bind_address", "METRICS_BIND_ADDRESS")
-	v.BindEnv("health_probe_bind_address", "HEALTH_PROBE_BIND_ADDRESS")
-	v.BindEnv("ts_image", "TS_IMAGE")
-	v.BindEnv("ts_auth_key", "TS_AUTHKEY", "ts_auth_key")
-	v.BindEnv("ts_cert_domain", "TS_CERT_DOMAIN", "ts_cert_domain")
-	v.BindEnv("caddy_image", "CADDY_IMAGE", "caddy_image")
+	if err := v.BindEnv("metrics_bind_address", "METRICS_BIND_ADDRESS"); err != nil {
+		return nil, err
+	}
+	if err := v.BindEnv("health_probe_bind_address", "HEALTH_PROBE_BIND_ADDRESS"); err != nil {
+		return nil, err
+	}
+	if err := v.BindEnv("ts_image", "TS_IMAGE"); err != nil {
+		return nil, err
+	}
+	if err := v.BindEnv("ts_auth_key", "TS_AUTHKEY", "ts_auth_key"); err != nil {
+		return nil, err
+	}
+	if err := v.BindEnv("ts_cert_domain", "TS_CERT_DOMAIN", "ts_cert_domain"); err != nil {
+		return nil, err
+	}
+	if err := v.BindEnv("caddy_image", "CADDY_IMAGE", "caddy_image"); err != nil {
+		return nil, err
+	}
 
-	return &Config{v: v}
+	return &Config{v: v}, nil
 }
 
 // GetMetricsBindAddress returns the metrics server bind address.
-func (c *Config) GetMetricsBindAddress() string {
-	return c.v.GetString("metrics_bind_address")
-}
+func (c *Config) GetMetricsBindAddress() string { return c.v.GetString("metrics_bind_address") }
 
 // GetHealthProbeBindAddress returns the health probe bind address.
 func (c *Config) GetHealthProbeBindAddress() string {

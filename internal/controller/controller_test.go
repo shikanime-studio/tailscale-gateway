@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	tailscaleconfig "github.com/shikanime-studio/tailscale-gateway/internal/tailscaleconfig"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -165,7 +166,10 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 			gwClient := gwfake.NewSimpleClientset(gwObjs...)
 			kubeClient := kfake.NewSimpleClientset()
 
-			cfg := New()
+			cfg, errCfg := config.New()
+			if errCfg != nil {
+				t.Fatalf("config init error: %v", errCfg)
+			}
 			r := NewGatewayReconciler(kubeClient, gwClient, s, cfg)
 
 			// Test reconciliation
