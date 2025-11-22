@@ -38,11 +38,6 @@ func NewClient(
 	return &Client{kube: kube, gateway: gw, scheme: scheme, cfg: cfg}
 }
 
-// GeneratedName returns the generated name for the proxy DaemonSet.
-func (c *Client) GeneratedName(gateway *gatewayv1.Gateway) string {
-	return fmt.Sprintf("%s-", gateway.Name)
-}
-
 // EnsureDaemonSet constructs and ensures the proxy DaemonSet exists and is current.
 func (c *Client) EnsureDaemonSet(
 	ctx context.Context,
@@ -63,8 +58,7 @@ func (c *Client) EnsureDaemonSet(
 		WithName(gateway.Name).
 		WithUID(gateway.UID)
 
-	dsApply := applyappsv1.DaemonSet("", gateway.Namespace).
-		WithGenerateName(c.GeneratedName(gateway)).
+	dsApply := applyappsv1.DaemonSet(gateway.Name, gateway.Namespace).
 		WithLabels(labels).
 		WithOwnerReferences(owner).
 		WithSpec(
