@@ -1,3 +1,4 @@
+// Package tailscaleconfig builds and encodes Tailscale serve configurations.
 package tailscaleconfig
 
 import (

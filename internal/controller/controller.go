@@ -27,13 +27,18 @@ const (
 	// GatewayClassName is the name of the GatewayClass this controller manages
 	GatewayClassName = "tailscale"
 
-	// Condition reasons for Gateway status
-	ConditionReasonReady          = "Ready"
-	ConditionReasonNotReady       = "NotReady"
-	ConditionReasonInvalid        = "Invalid"
+	// ConditionReasonReady indicates that the Gateway is ready.
+	ConditionReasonReady = "Ready"
+	// ConditionReasonNotReady indicates that the Gateway is not ready.
+	ConditionReasonNotReady = "NotReady"
+	// ConditionReasonInvalid indicates that the Gateway configuration is invalid.
+	ConditionReasonInvalid = "Invalid"
+	// ConditionReasonListenersValid indicates that all listeners are valid.
 	ConditionReasonListenersValid = "ListenersValid"
-	ConditionReasonNoListeners    = "NoListeners"
-	ConditionReasonProgrammed     = "Programmed"
+	// ConditionReasonNoListeners indicates that no listeners are configured.
+	ConditionReasonNoListeners = "NoListeners"
+	// ConditionReasonProgrammed indicates that listeners are programmed.
+	ConditionReasonProgrammed = "Programmed"
 )
 
 // NewGatewayReconciler creates a new GatewayReconciler
