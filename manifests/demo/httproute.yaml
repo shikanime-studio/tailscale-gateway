@@ -10,6 +10,13 @@ spec:
   hostnames:
     - demo
   rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: demo-api
+          port: 80
     - backendRefs:
         - name: demo
           port: 80
