@@ -18,5 +18,5 @@ spec:
         - name: demo-api
           port: 80
     - backendRefs:
-        - name: demo
+        - name: demo-front
           port: 80

@@ -5,3 +5,13 @@ resources:
   - httproute.yaml
   - ns.yaml
   - svc.yaml
+  - deploy.yaml
+configMapGenerator:
+  - name: demo-front
+    namespace: tailscale-gateway-demo
+    files:
+      - front/Caddyfile
+  - name: demo-api
+    namespace: tailscale-gateway-demo
+    files:
+      - api/Caddyfile
