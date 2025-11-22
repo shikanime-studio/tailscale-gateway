@@ -9,26 +9,26 @@ import (
 
 // Config represents a Caddyfile configuration consisting of multiple sites.
 type Config struct {
-    Sites []Site
+	Sites []Site
 }
 
 // Site represents a single Caddy virtual host and its upstreams and routes.
 type Site struct {
-    Address   string
-    Upstreams []string
-    Routes    []Route
+	Address   string
+	Upstreams []string
+	Routes    []Route
 }
 
 // Route describes path-based routing to upstream backends.
 type Route struct {
-    Paths     []PathMatch
-    Upstreams []string
+	Paths     []PathMatch
+	Upstreams []string
 }
 
 // PathMatch specifies a path match type and value.
 type PathMatch struct {
-    Type  string
-    Value string
+	Type  string
+	Value string
 }
 
 // Marshal serializes the Config to a Caddyfile by calling Marshal.
