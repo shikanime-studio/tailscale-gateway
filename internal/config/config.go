@@ -16,7 +16,6 @@ func New() (*Config, error) {
 	v.SetDefault("health_probe_bind_address", ":8081")
 	v.SetDefault("ts_image", "tailscale/tailscale:latest")
 	v.SetDefault("ts_cert_domain", "")
-	v.SetDefault("caddy_image", "caddy:latest")
 
 	if err := v.BindEnv("metrics_bind_address", "METRICS_BIND_ADDRESS"); err != nil {
 		return nil, err
@@ -31,9 +30,6 @@ func New() (*Config, error) {
 		return nil, err
 	}
 	if err := v.BindEnv("ts_cert_domain", "TS_CERT_DOMAIN", "ts_cert_domain"); err != nil {
-		return nil, err
-	}
-	if err := v.BindEnv("caddy_image", "CADDY_IMAGE", "caddy_image"); err != nil {
 		return nil, err
 	}
 
@@ -56,6 +52,3 @@ func (c *Config) GetTailscaleImage() string { return c.v.GetString("ts_image") }
 
 // GetCertDomain returns the optional DNS suffix to append for certificates.
 func (c *Config) GetCertDomain() string { return c.v.GetString("ts_cert_domain") }
-
-// GetCaddyImage returns the caddy reverse proxy container image.
-func (c *Config) GetCaddyImage() string { return c.v.GetString("caddy_image") }
