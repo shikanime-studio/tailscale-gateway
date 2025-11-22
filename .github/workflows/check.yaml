@@ -15,7 +15,7 @@ jobs:
         with:
           github-token: ${{ steps.createGithubAppToken.outputs.token }}
       - uses: shikanime-studio/direnv-action@v2
-      - run: nix flake check --accept-flake-config --all-systems --impure
+      - run: nix flake check --accept-flake-config --all-systems --no-pure-eval
 name: Check
 "on":
   pull_request:
