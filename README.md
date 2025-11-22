@@ -2,13 +2,14 @@
 
 Kubernetes controller that integrates the Gateway API with Tailscale. For each
 `Gateway`, it provisions a per-node proxy DaemonSet that bridges Tailscale Serve
-to cluster `Service`s discovered from `HTTPRoute`s.
+to a local Caddy reverse proxy, which then routes to cluster `Service`s discovered
+from `HTTPRoute`s.
 
 ## Overview
 
 - Reconciles `Gateway` resources and discovers referenced `HTTPRoute`s
-- Generates Tailscale Serve HUJSON config to proxy directly to Kubernetes `Service`s
-- Applies `ConfigMap` and a DaemonSet with a `tailscale` container
+- Generates Tailscale Serve HUJSON config to proxy to the local Caddy sidecar
+- Applies ConfigMaps and a DaemonSet with `tailscale` and `caddy` containers
 - Updates `Gateway` status and listener conditions; publishes a hostname address
 
 ## Install
@@ -74,6 +75,8 @@ Environment variables consumed by the controller:
 - `HEALTH_PROBE_BIND_ADDRESS` (default `:8081`)
 - `TS_IMAGE` (default `tailscale/tailscale:latest`)
 - `TS_AUTHKEY` (optional; controller reads and writes `authkey` in Secret)
+- `TS_CERT_DOMAIN` (optional; DNS suffix appended to published hostnames)
+- `CADDY_IMAGE` (default `caddy:latest`)
 
 ## Usage
 
@@ -119,9 +122,16 @@ kubectl apply -k manifests/demo
 
 ### What gets created
 
-- DaemonSet `<gateway>-tailscale-gateway` in the Gateway namespace
-- ConfigMap `<gateway>` containing `services.hujson`
+- DaemonSet with generated name prefix `<gateway>-` in the Gateway namespace, running `tailscale` and `caddy`
+- ConfigMap `<gateway>` containing `services.hujson` (Tailscale Serve config)
+- ConfigMap `<gateway>-caddy` containing `Caddyfile` (Caddy reverse proxy config)
 - Secret `<gateway>` in the Gateway namespace with key `authkey` (populated if `TS_AUTHKEY` is set)
+
+### Traffic flow
+
+- Tailscale listens on Gateway HTTP/HTTPS listeners
+- Requests are forwarded to Caddy on `127.0.0.1:<listenerPort>` inside the pod
+- Caddy routes to `HTTPRoute` backends with path matches and weights
 
 ## Observability
 

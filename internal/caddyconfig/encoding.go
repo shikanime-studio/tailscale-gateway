@@ -8,16 +8,23 @@ import (
 var caddyfileTmpl = template.Must(template.New("Caddyfile").Parse(
 	`{{- range .Sites }}
 {{ .Address }} {
-    {{- if .Upstreams }}
-    reverse_proxy{{ range .Upstreams }} {{ . }}{{ end }}
-    {{- end }}
-    {{- range $i, $r := .Routes }}
-    @r{{$i}} {
+    {{- range $r := .Routes }}
         {{- range $r.Paths }}
-        {{- if eq .Type "PathPrefix" }}path {{ .Value }}*{{ else if eq .Type "PathExact" }}path {{ .Value }}{{ else }}path {{ .Value }}*{{ end }}
-        {{- end }}
+        {{- if eq .Type "PathExact" }}
+    handle {{ .Value }} {
+        reverse_proxy{{ range $r.Upstreams }} {{ . }}{{ end }}
     }
-    reverse_proxy @r{{$i}}{{ range $r.Upstreams }} {{ . }}{{ end }}
+        {{- else }}
+    handle_path {{ .Value }} {
+        reverse_proxy{{ range $r.Upstreams }} {{ . }}{{ end }}
+    }
+        {{- end }}
+        {{- end }}
+    {{- end }}
+    {{- if .Upstreams }}
+    handle {
+        reverse_proxy{{ range .Upstreams }} {{ . }}{{ end }}
+    }
     {{- end }}
 }
 {{ end }}`,
