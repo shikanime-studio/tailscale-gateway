@@ -107,28 +107,40 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 								}
 								addr := ipn.HostPort(fmt.Sprintf("%s:%d", host, l.Port))
 								if _, ok := cfg.cfg.Services[svcName].Web[addr]; !ok {
-									cfg.cfg.Services[svcName].Web[addr] = &ipn.WebServerConfig{Handlers: map[string]*ipn.HTTPHandler{}}
+									cfg.cfg.Services[svcName].Web[addr] = &ipn.WebServerConfig{
+										Handlers: map[string]*ipn.HTTPHandler{},
+									}
 								}
 								if cfg.cfg.Services[svcName].Web[addr].Handlers == nil {
 									cfg.cfg.Services[svcName].Web[addr].Handlers = map[string]*ipn.HTTPHandler{}
 								}
 								if _, ok := cfg.cfg.Services[svcName].Web[addr].Handlers["/"]; !ok {
-									cfg.cfg.Services[svcName].Web[addr].Handlers["/"] = &ipn.HTTPHandler{Proxy: "http://127.0.0.1:80"}
+									cfg.cfg.Services[svcName].Web[addr].Handlers["/"] = &ipn.HTTPHandler{
+										Proxy: "http://127.0.0.1:80",
+									}
 								}
 								for _, rule := range hr.Spec.Rules {
 									for _, match := range rule.Matches {
-										if match.Path != nil {
-											if *match.Path.Type != gatewayv1.PathMatchPathPrefix {
-												return nil, fmt.Errorf("only PathMatchPathPrefix is supported")
-											}
-											if match.Path.Value != nil {
-												path := *match.Path.Value
-												if path == "" {
-													continue
-												}
-												if _, ok := cfg.cfg.Services[svcName].Web[addr].Handlers[path]; !ok {
-													cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{Proxy: "http://127.0.0.1:80"}
-												}
+										if match.Path == nil {
+											continue
+										}
+										mt := gatewayv1.PathMatchPathPrefix
+										if match.Path.Type != nil {
+											mt = *match.Path.Type
+										}
+										if mt != gatewayv1.PathMatchPathPrefix {
+											continue
+										}
+										if match.Path.Value == nil {
+											continue
+										}
+										path := *match.Path.Value
+										if path == "" {
+											continue
+										}
+										if _, ok := cfg.cfg.Services[svcName].Web[addr].Handlers[path]; !ok {
+											cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{
+												Proxy: "http://127.0.0.1:80",
 											}
 										}
 									}
@@ -151,14 +163,25 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 									}
 									for _, rule := range hr.Spec.Rules {
 										for _, match := range rule.Matches {
-											if match.Path != nil && match.Path.Value != nil {
-												path := *match.Path.Value
-												if path == "" {
-													continue
-												}
-												if _, ok := cfg.cfg.Services[svcName].Web[addr].Handlers[path]; !ok {
-													cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{Proxy: "http://127.0.0.1:80"}
-												}
+											if match.Path == nil {
+												continue
+											}
+											mt := gatewayv1.PathMatchPathPrefix
+											if match.Path.Type != nil {
+												mt = *match.Path.Type
+											}
+											if mt != gatewayv1.PathMatchPathPrefix {
+												continue
+											}
+											if match.Path.Value == nil {
+												continue
+											}
+											path := *match.Path.Value
+											if path == "" {
+												continue
+											}
+											if _, ok := cfg.cfg.Services[svcName].Web[addr].Handlers[path]; !ok {
+												cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{Proxy: "http://127.0.0.1:80"}
 											}
 										}
 									}
