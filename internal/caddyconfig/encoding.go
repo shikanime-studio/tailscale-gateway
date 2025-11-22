@@ -11,6 +11,14 @@ var caddyfileTmpl = template.Must(template.New("Caddyfile").Parse(
     {{- if .Upstreams }}
     reverse_proxy{{ range .Upstreams }} {{ . }}{{ end }}
     {{- end }}
+    {{- range $i, $r := .Routes }}
+    @r{{$i}} {
+        {{- range $r.Paths }}
+        {{- if eq .Type "PathPrefix" }}path {{ .Value }}*{{ else if eq .Type "PathExact" }}path {{ .Value }}{{ else }}path {{ .Value }}*{{ end }}
+        {{- end }}
+    }
+    reverse_proxy @r{{$i}}{{ range $r.Upstreams }} {{ . }}{{ end }}
+    {{- end }}
 }
 {{ end }}`,
 ))
