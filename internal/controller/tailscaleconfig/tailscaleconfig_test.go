@@ -160,6 +160,51 @@ func TestMarshal_HandlersWithPathMatches(t *testing.T) {
 	}
 }
 
+func TestNewConfig_ErrorsOnMultipleBackendRefs(t *testing.T) {
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-gw"},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{
+				{Name: "http", Protocol: gatewayv1.HTTPProtocolType, Port: 80},
+			},
+		},
+	}
+
+	hr := &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: gatewayv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{
+				ParentRefs: []gatewayv1.ParentReference{{Name: gatewayv1.ObjectName(gw.Name)}},
+			},
+			Rules: []gatewayv1.HTTPRouteRule{{
+				BackendRefs: []gatewayv1.HTTPBackendRef{
+					{
+						BackendRef: gatewayv1.BackendRef{
+							BackendObjectReference: gatewayv1.BackendObjectReference{
+								Name: "svc1",
+								Port: ptrTo(gatewayv1.PortNumber(8080)),
+							},
+						},
+					},
+					{
+						BackendRef: gatewayv1.BackendRef{
+							BackendObjectReference: gatewayv1.BackendObjectReference{
+								Name: "svc2",
+								Port: ptrTo(gatewayv1.PortNumber(8081)),
+							},
+						},
+					},
+				},
+			}},
+		},
+	}
+
+	_, err := NewConfig(gw, WithHTTPRoute(hr))
+	if err == nil {
+		t.Fatalf("expected error on multiple BackendRefs, got nil")
+	}
+}
+
 func TestMarshal_IgnoresNonPrefixPathMatches(t *testing.T) {
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-gw"},
