@@ -39,6 +39,9 @@ const (
 	ConditionReasonNoListeners = "NoListeners"
 	// ConditionReasonProgrammed indicates that listeners are programmed.
 	ConditionReasonProgrammed = "Programmed"
+
+	// gatewayFinalizer is the finalizer used to clean up devices on Gateway deletion.
+	gatewayFinalizer = "tailscale.shikanime.dev/device-cleanup"
 )
 
 // NewGatewayReconciler creates a new GatewayReconciler
@@ -73,12 +76,21 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Check if the Gateway is managed by this controller
-	if gateway.Spec.GatewayClassName != GatewayClassName {
+	if !r.isManagedByController(gateway) {
 		return ctrl.Result{}, nil
 	}
 
-	// Build client for helper operations
-	client := NewClient(r.Kube, r.Gateway, r.Scheme, r.Cfg)
+	// Build resource manager for helper operations
+	client := NewResourceManager(r.Kube, r.Gateway, r.Scheme, r.Cfg)
+
+	handled, ferr := r.ReconcileFinalizer(ctx, client, gateway)
+	if ferr != nil {
+		log.Error(ferr, "Finalizer reconciliation failed")
+		return ctrl.Result{}, ferr
+	}
+	if handled {
+		return ctrl.Result{}, nil
+	}
 
 	// Validate Gateway listeners
 	if err := r.validateListeners(gateway); err != nil {
@@ -110,6 +122,33 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		fmt.Sprintf("%s-%s", gateway.Namespace, gateway.Name),
 	)
 	return ctrl.Result{}, nil
+}
+
+// ReconcileFinalizer handles adding or removing the Gateway finalizer and performs
+// network resource cleanup on deletion. It returns handled=true if reconciliation
+// should stop due to deletion being processed.
+func (r *GatewayReconciler) ReconcileFinalizer(
+	ctx context.Context,
+	client *ResourceManager,
+	gateway *gatewayv1.Gateway,
+) (bool, error) {
+	if gateway.DeletionTimestamp != nil {
+		if err := NewNetworkManager(r.Cfg).DeleteDevices(ctx, gateway); err != nil {
+			return true, err
+		}
+		if err := client.RemoveFinalizer(ctx, gateway, gatewayFinalizer); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	if err := client.AddFinalizer(ctx, gateway, gatewayFinalizer); err != nil {
+		return true, err
+	}
+	return false, nil
+}
+
+func (r *GatewayReconciler) isManagedByController(gw *gatewayv1.Gateway) bool {
+	return gw.Spec.GatewayClassName == GatewayClassName
 }
 
 // validateListeners validates the Gateway listeners configuration
