@@ -1,3 +1,4 @@
+// Package caddyconfig models and generates Caddyfile configuration from Gateway API resources.
 package caddyconfig
 
 import (
@@ -7,10 +8,12 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// Config represents a Caddyfile configuration consisting of multiple sites.
 type Config struct {
 	Sites []Site
 }
 
+// Site represents a single Caddy virtual host and its upstream backends.
 type Site struct {
 	Address   string
 	Upstreams []string
@@ -29,6 +32,7 @@ type options struct {
 	Host       string
 }
 
+// Option modifies options used to build a Caddyfile Config.
 type Option func(*options)
 
 // makeOptions applies a series of Option functions to options.
