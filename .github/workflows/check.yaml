@@ -15,9 +15,7 @@ jobs:
         with:
           github-token: ${{ steps.createGithubAppToken.outputs.token }}
       - name: Check Nix Flake
-        run: nix flake check --accept-flake-config --all-systems --no-pure-eval
-        env:
-          GOPROXY: https://proxy.golang.org,direct
+        run: nix flake check --accept-flake-config --all-systems --impure
 name: Check
 "on":
   pull_request:
