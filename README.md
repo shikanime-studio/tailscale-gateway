@@ -1,6 +1,8 @@
 # Tailscale Gateway API Controller
 
-Kubernetes controller that integrates the Gateway API with Tailscale. For each `Gateway`, it provisions a per-node proxy DaemonSet that bridges Tailscale Serve to cluster `Service`s discovered from `HTTPRoute`s.
+Kubernetes controller that integrates the Gateway API with Tailscale. For each
+`Gateway`, it provisions a per-node proxy DaemonSet that bridges Tailscale Serve
+to cluster `Service`s discovered from `HTTPRoute`s.
 
 ## Overview
 
@@ -8,13 +10,6 @@ Kubernetes controller that integrates the Gateway API with Tailscale. For each `
 - Generates Tailscale Serve HUJSON config to proxy directly to Kubernetes `Service`s
 - Applies `ConfigMap` and a DaemonSet with a `tailscale` container
 - Updates `Gateway` status and listener conditions; publishes a hostname address
-
-## Features
-
-- Gateway API v1: HTTP/HTTPS listeners
-- HTTPRoute backend discovery across namespaces via `parentRefs`
-- Direct proxy to `service.namespace:port` endpoints via Tailscale Serve
-- Status conditions for Gateway and Listeners; hostname `ns-name.ts.net` when ready
 
 ## Install
 
@@ -34,7 +29,7 @@ kubectl -n tailscale-system create secret generic tailscale-gateway-controller \
   --from-literal=authkey=tskey-xxxxxxxxxxxxxxxx
 ```
 
-### Option B: Skaffold (ko)
+### Option B: Skaffold
 
 ```bash
 # Requires ko and skaffold
