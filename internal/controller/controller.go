@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -72,27 +71,29 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
+	// Build client for helper operations
+	client := NewClient(r.Kube, r.Gateway, r.Scheme, r.Cfg)
+
 	// Validate Gateway listeners
 	if err := r.validateListeners(gateway); err != nil {
 		log.Error(err, "Gateway validation failed")
-		if err = r.updateGatewayStatus(ctx, gateway, false, ConditionReasonInvalid, err.Error()); err != nil {
+		if err = client.UpdateGatewayStatus(ctx, gateway, false, ConditionReasonInvalid, err.Error()); err != nil {
 			log.Error(err, "Failed to update Gateway status")
 		}
 		return ctrl.Result{}, nil // Don't retry validation errors immediately
 	}
 
 	// Build backend list from HTTPRoutes and ensure proxy deployment via client helper
-	client := NewClient(r.Kube, r.Gateway, r.Scheme, r.Cfg)
 	if err := client.Ensure(ctx, gateway); err != nil {
 		log.Error(err, "Failed to manage proxy servers")
-		if err = r.updateGatewayStatus(ctx, gateway, false, ConditionReasonNotReady, err.Error()); err != nil {
+		if err = client.UpdateGatewayStatus(ctx, gateway, false, ConditionReasonNotReady, err.Error()); err != nil {
 			log.Error(err, "Failed to update Gateway status")
 		}
 		return ctrl.Result{}, err
 	}
 
 	// Update Gateway status as ready
-	if err := r.updateGatewayStatus(ctx, gateway, true, ConditionReasonReady, "Gateway is ready"); err != nil {
+	if err := client.UpdateGatewayStatus(ctx, gateway, true, ConditionReasonReady, "Gateway is ready"); err != nil {
 		log.Error(err, "Failed to update Gateway status")
 		return ctrl.Result{}, err
 	}
@@ -120,93 +121,6 @@ func (r *GatewayReconciler) validateListeners(gateway *gatewayv1.Gateway) error 
 		if listener.Port < 1 || listener.Port > 65535 {
 			return fmt.Errorf("listener %d: invalid port %d", i, listener.Port)
 		}
-	}
-
-	return nil
-}
-
-// updateGatewayStatus updates the Gateway status conditions
-func (r *GatewayReconciler) updateGatewayStatus(
-	ctx context.Context,
-	gateway *gatewayv1.Gateway,
-	ready bool,
-	reason, message string,
-) error {
-
-	// Update the Ready condition
-	condition := metav1.Condition{
-		Type:               string(gatewayv1.GatewayConditionReady),
-		Status:             metav1.ConditionFalse,
-		ObservedGeneration: gateway.Generation,
-		LastTransitionTime: metav1.Now(),
-		Reason:             reason,
-		Message:            message,
-	}
-
-	if ready {
-		condition.Status = metav1.ConditionTrue
-	}
-
-	meta.SetStatusCondition(&gateway.Status.Conditions, condition)
-
-	var listenerStatuses []gatewayv1.ListenerStatus
-	for _, listener := range gateway.Spec.Listeners {
-		listenerStatus := gatewayv1.ListenerStatus{
-			Name: listener.Name,
-			SupportedKinds: []gatewayv1.RouteGroupKind{
-				{Group: (*gatewayv1.Group)(&gatewayv1.GroupVersion.Group), Kind: "HTTPRoute"},
-			},
-			Conditions: []metav1.Condition{},
-		}
-
-		accepted := metav1.Condition{
-			Type:               "Accepted",
-			Status:             metav1.ConditionTrue,
-			ObservedGeneration: gateway.Generation,
-			LastTransitionTime: metav1.Now(),
-			Reason:             "Accepted",
-			Message:            "Listener is accepted",
-		}
-
-		programmed := metav1.Condition{
-			Type:               "Programmed",
-			Status:             metav1.ConditionTrue,
-			ObservedGeneration: gateway.Generation,
-			LastTransitionTime: metav1.Now(),
-			Reason:             "Programmed",
-			Message:            "Listener is programmed",
-		}
-
-		if !ready {
-			accepted.Status = metav1.ConditionFalse
-			accepted.Reason = "Invalid"
-			accepted.Message = message
-
-			programmed.Status = metav1.ConditionFalse
-			programmed.Reason = "Pending"
-			programmed.Message = message
-		}
-
-		meta.SetStatusCondition(&listenerStatus.Conditions, accepted)
-		meta.SetStatusCondition(&listenerStatus.Conditions, programmed)
-		listenerStatuses = append(listenerStatuses, listenerStatus)
-	}
-
-	gateway.Status.Listeners = listenerStatuses
-
-	// Update addresses if ready
-	if ready {
-		hostname := fmt.Sprintf("%s-%s", gateway.Namespace, gateway.Name)
-		gateway.Status.Addresses = []gatewayv1.GatewayStatusAddress{
-			{
-				Type:  (*gatewayv1.AddressType)(&[]string{"Hostname"}[0]),
-				Value: hostname,
-			},
-		}
-	}
-
-	if _, err := r.Gateway.GatewayV1().Gateways(gateway.Namespace).UpdateStatus(ctx, gateway, metav1.UpdateOptions{}); err != nil {
-		return fmt.Errorf("failed to update Gateway status: %w", err)
 	}
 
 	return nil
