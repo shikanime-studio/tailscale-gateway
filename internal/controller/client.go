@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/shikanime-studio/tailscale-gateway/internal/caddyconfig"
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	"github.com/shikanime-studio/tailscale-gateway/internal/tailscaleconfig"
 	corev1 "k8s.io/api/core/v1"
@@ -143,6 +144,15 @@ func (c *Client) EnsureDaemonSet(
 												WithMountPath("/etc/tailscaled/services.hujson").
 												WithSubPath("services.hujson"),
 										),
+									applycorev1.Container().
+										WithName("caddy").
+										WithImage(c.cfg.GetCaddyImage()).
+										WithVolumeMounts(
+											applycorev1.VolumeMount().
+												WithName("caddy").
+												WithMountPath("/etc/caddy/Caddyfile").
+												WithSubPath("Caddyfile"),
+										),
 								).
 								WithVolumes(
 									applycorev1.Volume().
@@ -151,6 +161,13 @@ func (c *Client) EnsureDaemonSet(
 											applycorev1.ConfigMapVolumeSource().
 												WithName(gateway.Name).
 												WithItems(applycorev1.KeyToPath().WithKey("services.hujson").WithPath("services.hujson")),
+										),
+									applycorev1.Volume().
+										WithName("caddy").
+										WithConfigMap(
+											applycorev1.ConfigMapVolumeSource().
+												WithName(caddyconfig.ConfigMapName(gateway)).
+												WithItems(applycorev1.KeyToPath().WithKey("Caddyfile").WithPath("Caddyfile")),
 										),
 								),
 						),
@@ -233,6 +250,17 @@ func (c *Client) Ensure(
 	if err := c.UpdateConfig(ctx, gateway, gateway.Name, tsCfg); err != nil {
 		return err
 	}
+	caddyCfg, err := caddyconfig.NewConfig(
+		gateway,
+		caddyconfig.WithHTTPRoutes(routes),
+		caddyconfig.WithHost(c.cfg.GetTailscaleTailnet()),
+	)
+	if err != nil {
+		return err
+	}
+	if err := c.UpdateCaddyConfig(ctx, gateway, caddyconfig.ConfigMapName(gateway), caddyCfg); err != nil {
+		return err
+	}
 	logger.Info("daemon set ensured", "gateway", gateway.Name)
 	return nil
 }
@@ -301,7 +329,7 @@ func (c *Client) EnsureSecret(
 		WithUID(gateway.UID)
 
 	stringData := map[string]string{}
-	if v := c.cfg.GetTSAuthKey(); v != "" {
+	if v := c.cfg.GetTailscaleAPIKey(); v != "" {
 		stringData["authkey"] = v
 	}
 
@@ -339,6 +367,36 @@ func (c *Client) UpdateConfig(
 	cmApply := applycorev1.ConfigMap(cmName, gateway.Namespace).
 		WithLabels(gateway.Labels).
 		WithData(map[string]string{"services.hujson": servicesConfig}).
+		WithOwnerReferences(owner)
+
+	_, err := c.kube.CoreV1().
+		ConfigMaps(gateway.Namespace).
+		Apply(ctx, cmApply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
+	return err
+}
+
+// UpdateCaddyConfig ensures the Caddyfile ConfigMap exists and is up to date.
+func (c *Client) UpdateCaddyConfig(
+	ctx context.Context,
+	gateway *gatewayv1.Gateway,
+	cmName string,
+	cfg *caddyconfig.Config,
+) error {
+	b, merr := caddyconfig.Marshal(cfg)
+	if merr != nil {
+		return merr
+	}
+	caddyfile := string(b)
+
+	owner := applymetav1.OwnerReference().
+		WithAPIVersion("gateway.networking.k8s.io/v1").
+		WithKind("Gateway").
+		WithName(gateway.Name).
+		WithUID(gateway.UID)
+
+	cmApply := applycorev1.ConfigMap(cmName, gateway.Namespace).
+		WithLabels(gateway.Labels).
+		WithData(map[string]string{"Caddyfile": caddyfile}).
 		WithOwnerReferences(owner)
 
 	_, err := c.kube.CoreV1().

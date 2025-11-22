@@ -20,7 +20,7 @@ spec:
         - name: controller
           image: ghcr.io/shikanime-studio/tailscale-gateway/controller
           env:
-            - name: TS_AUTHKEY
+            - name: TAILSCALE_AUTHKEY
               valueFrom:
                 secretKeyRef:
                   name: tailscale-gateway-controller
