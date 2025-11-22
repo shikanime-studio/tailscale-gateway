@@ -16,6 +16,8 @@ type Config struct {
 type Site struct {
 	Address   string
 	Upstreams []string
+	Address   string
+	Upstreams []string
 	Routes    []Route
 }
 
