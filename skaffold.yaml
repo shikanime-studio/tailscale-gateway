@@ -15,6 +15,11 @@ build:
         dir: ./cmd/controller
         fromImage: cgr.dev/chainguard/glibc-dynamic
 profiles:
+  - name: default
+    manifest:
+      kustomize:
+        paths:
+          - manifests/gateway/base
   - name: demo
     manifests:
       kustomize:
