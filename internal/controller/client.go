@@ -301,7 +301,7 @@ func (c *Client) EnsureSecret(
 		WithUID(gateway.UID)
 
 	stringData := map[string]string{}
-	if v := c.cfg.GetTSAuthKey(); v != "" {
+	if v := c.cfg.GetTailscaleAuthKey(); v != "" {
 		stringData["authkey"] = v
 	}
 

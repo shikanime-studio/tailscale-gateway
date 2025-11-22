@@ -45,11 +45,11 @@ func (c *Config) GetHealthProbeBindAddress() string {
 	return c.v.GetString("health_probe_bind_address")
 }
 
-// GetTSAuthKey returns the optional Tailscale auth key.
-func (c *Config) GetTSAuthKey() string { return c.v.GetString("ts_auth_key") }
+// GetTailscaleAuthKey returns the optional Tailscale auth key.
+func (c *Config) GetTailscaleAuthKey() string { return c.v.GetString("ts_auth_key") }
 
 // GetTailscaleImage returns the tailscale daemon container image.
 func (c *Config) GetTailscaleImage() string { return c.v.GetString("ts_image") }
 
-// GetCertDomain returns the optional DNS suffix to append for certificates.
-func (c *Config) GetCertDomain() string { return c.v.GetString("ts_cert_domain") }
+// GetTailscaleCertDomain returns the optional DNS suffix to append for certificates.
+func (c *Config) GetTailscaleCertDomain() string { return c.v.GetString("ts_cert_domain") }
