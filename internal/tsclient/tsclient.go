@@ -52,12 +52,6 @@ func (tc *TailscaleClient) CreateAuthKey(ctx context.Context, tags []string) (st
 	return key.Key, nil
 }
 
-// DeleteAuthKey deletes the auth key with the provided key string.
-func (tc *TailscaleClient) DeleteAuthKey(ctx context.Context, key string) error {
-	return tc.c.Keys().
-		Delete(ctx, key)
-}
-
 // DeleteDevice deletes the device with the provided ID.
 func (tc *TailscaleClient) DeleteDevice(ctx context.Context, id string) error {
 	return tc.c.Devices().
