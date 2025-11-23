@@ -2,8 +2,10 @@ package tsconfig
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
+	"k8s.io/utils/ptr"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"tailscale.com/ipn"
 	"tailscale.com/tailcfg"
@@ -15,232 +17,47 @@ type Config struct {
 }
 
 // Marshal serializes the Config into HUJSON-formatted Tailscale serve config bytes.
-func (c *Config) Marshal() ([]byte, error) { return Marshal(c) }
-
-type serviceOptions struct {
-	HTTPRoutes []*gatewayv1.HTTPRoute
-	Host       string
+func (c *Config) Marshal() ([]byte, error) {
+	return Marshal(c)
 }
 
-// Option modifies serviceOptions used to build a Config.
-type Option func(*serviceOptions)
+type options struct {
+	HTTPRoutes []*gatewayv1.HTTPRoute
+}
 
-// makeOptions applies a series of Option functions to serviceOptions.
-func makeOptions(opts []Option) serviceOptions {
-	o := serviceOptions{}
+// Option modifies options used to build a Config.
+type Option func(*options)
+
+// makeOptions applies a series of Option functions to options.
+func makeOptions(opts []Option) options {
+	o := options{}
 	for _, opt := range opts {
 		opt(&o)
 	}
 	return o
 }
 
-// WithHTTPRoute adds a single HTTPRoute to service options.
-func WithHTTPRoute(hr *gatewayv1.HTTPRoute) Option {
-	return func(o *serviceOptions) { o.HTTPRoutes = append(o.HTTPRoutes, hr) }
-}
-
 // WithHTTPRoutes adds multiple HTTPRoutes to service options.
-func WithHTTPRoutes(hrs []gatewayv1.HTTPRoute) Option {
-	return func(o *serviceOptions) {
-		for i := range hrs {
-			o.HTTPRoutes = append(o.HTTPRoutes, &hrs[i])
-		}
+func WithHTTPRoutes(hrs []*gatewayv1.HTTPRoute) Option {
+	return func(o *options) {
+		o.HTTPRoutes = hrs
 	}
-}
-
-// WithHost sets the optional DNS suffix to append to hostnames.
-func WithHost(name string) Option {
-	return func(o *serviceOptions) { o.Host = name }
 }
 
 // NewConfig builds a Tailscale serve Config from a Gateway and HTTPRoutes.
 func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 	o := makeOptions(opts)
-	if gw == nil {
-		return nil, fmt.Errorf("gateway is nil")
-	}
 
-	cfg := newServeConfig()
-
-	// Web handlers for hostnames or default gateway hostname
+	cfg := &Config{cfg: &ipn.ServeConfig{Services: map[tailcfg.ServiceName]*ipn.ServiceConfig{}}}
 	for _, hr := range o.HTTPRoutes {
-		// Determine service key: hostnames or gateway name
-		var serviceKeys []tailcfg.ServiceName
-		if len(hr.Spec.Hostnames) == 0 {
-			serviceKeys = []tailcfg.ServiceName{
-				tailcfg.AsServiceName(fmt.Sprintf("svc:%s", gw.Name)),
-			}
-		} else {
-			for _, host := range hr.Spec.Hostnames {
-				serviceKeys = append(serviceKeys, tailcfg.AsServiceName(fmt.Sprintf("svc:%s", host)))
-			}
-		}
-
-		for _, svcName := range serviceKeys {
+		for _, svcName := range hr.Spec.Hostnames {
+			svcName := newServiceName(svcName)
 			if _, ok := cfg.cfg.Services[svcName]; !ok {
-				cfg.cfg.Services[svcName] = &ipn.ServiceConfig{
-					TCP: map[uint16]*ipn.TCPPortHandler{},
-					Web: map[ipn.HostPort]*ipn.WebServerConfig{},
+				svc, err := newServiceConfig(gw, hr)
+				if err != nil {
+					return nil, err
 				}
-			}
-			for _, l := range gw.Spec.Listeners {
-				switch l.Protocol {
-				case gatewayv1.HTTPProtocolType:
-					cfg.cfg.Services[svcName].TCP[uint16(l.Port)] = &ipn.TCPPortHandler{HTTP: true}
-				case gatewayv1.HTTPSProtocolType:
-					cfg.cfg.Services[svcName].TCP[uint16(l.Port)] = &ipn.TCPPortHandler{HTTPS: true}
-				default:
-					continue
-				}
-			}
-
-			for _, pr := range hr.Spec.ParentRefs {
-				if string(pr.Name) == string(gw.Name) {
-					if pr.Namespace == nil || string(*pr.Namespace) == string(gw.Namespace) {
-						for _, l := range gw.Spec.Listeners {
-							if l.Protocol != gatewayv1.HTTPProtocolType &&
-								l.Protocol != gatewayv1.HTTPSProtocolType {
-								continue
-							}
-							if len(hr.Spec.Hostnames) == 0 {
-								host := fmt.Sprintf("%s-%s", gw.Namespace, gw.Name)
-								if o.Host != "" {
-									host = fmt.Sprintf("%s.%s", host, o.Host)
-								}
-								addr := ipn.HostPort(fmt.Sprintf("%s:%d", host, l.Port))
-								if _, ok := cfg.cfg.Services[svcName].Web[addr]; !ok {
-									cfg.cfg.Services[svcName].Web[addr] = &ipn.WebServerConfig{
-										Handlers: map[string]*ipn.HTTPHandler{},
-									}
-								}
-								if cfg.cfg.Services[svcName].Web[addr].Handlers == nil {
-									cfg.cfg.Services[svcName].Web[addr].Handlers = map[string]*ipn.HTTPHandler{}
-								}
-								for _, rule := range hr.Spec.Rules {
-									// Determine upstream; error if multiple backendRefs supported
-									var upstream string
-									valid := 0
-									for _, br := range rule.BackendRefs {
-										if br.Port == nil {
-											continue
-										}
-										ns := hr.Namespace
-										if br.Namespace != nil {
-											ns = string(*br.Namespace)
-										}
-										valid++
-										if valid == 1 {
-											upstream = fmt.Sprintf(
-												"http://%s.%s:%d",
-												br.Name,
-												ns,
-												*br.Port,
-											)
-										}
-									}
-									if valid > 1 {
-										return nil, fmt.Errorf(
-											"multiple BackendRefs in a single rule are not supported",
-										)
-									}
-									if upstream == "" {
-										continue
-									}
-									if len(rule.Matches) == 0 {
-										cfg.cfg.Services[svcName].Web[addr].Handlers["/"] = &ipn.HTTPHandler{
-											Proxy: upstream,
-										}
-										continue
-									}
-									for _, match := range rule.Matches {
-										if match.Path == nil {
-											continue
-										}
-										mt := gatewayv1.PathMatchPathPrefix
-										if match.Path.Type != nil {
-											mt = *match.Path.Type
-										}
-										if mt != gatewayv1.PathMatchPathPrefix {
-											continue
-										}
-										if match.Path.Value == nil {
-											continue
-										}
-										path := *match.Path.Value
-										if path == "" {
-											continue
-										}
-										cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{
-											Proxy: fmt.Sprintf("%s%s", upstream, path),
-										}
-									}
-								}
-							} else {
-								for _, h := range hr.Spec.Hostnames {
-									host := string(h)
-									if o.Host != "" {
-										host = fmt.Sprintf("%s.%s", host, o.Host)
-									}
-									addr := ipn.HostPort(fmt.Sprintf("%s:%d", host, l.Port))
-									if _, ok := cfg.cfg.Services[svcName].Web[addr]; !ok {
-										cfg.cfg.Services[svcName].Web[addr] = &ipn.WebServerConfig{Handlers: map[string]*ipn.HTTPHandler{}}
-									}
-									if cfg.cfg.Services[svcName].Web[addr].Handlers == nil {
-										cfg.cfg.Services[svcName].Web[addr].Handlers = map[string]*ipn.HTTPHandler{}
-									}
-									for _, rule := range hr.Spec.Rules {
-										// Determine upstream; error if multiple backendRefs supported
-										var upstream string
-										valid := 0
-										for _, br := range rule.BackendRefs {
-											if br.Port == nil {
-												continue
-											}
-											ns := hr.Namespace
-											if br.Namespace != nil {
-												ns = string(*br.Namespace)
-											}
-											valid++
-											if valid == 1 {
-												upstream = fmt.Sprintf("http://%s.%s:%d", br.Name, ns, *br.Port)
-											}
-										}
-										if valid > 1 {
-											return nil, fmt.Errorf("multiple BackendRefs in a single rule are not supported")
-										}
-										if upstream == "" {
-											continue
-										}
-										if len(rule.Matches) == 0 {
-											cfg.cfg.Services[svcName].Web[addr].Handlers["/"] = &ipn.HTTPHandler{Proxy: upstream}
-											continue
-										}
-										for _, match := range rule.Matches {
-											if match.Path == nil {
-												continue
-											}
-											mt := gatewayv1.PathMatchPathPrefix
-											if match.Path.Type != nil {
-												mt = *match.Path.Type
-											}
-											if mt != gatewayv1.PathMatchPathPrefix {
-												continue
-											}
-											if match.Path.Value == nil {
-												continue
-											}
-											path := *match.Path.Value
-											if path == "" {
-												continue
-											}
-											cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{Proxy: upstream}
-										}
-									}
-								}
-							}
-						}
-					}
-				}
+				cfg.cfg.Services[svcName] = svc
 			}
 		}
 	}
@@ -248,9 +65,160 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 	return cfg, nil
 }
 
-// newServeConfig returns an empty Config with initialized internal maps.
-func newServeConfig() *Config {
-	return &Config{cfg: &ipn.ServeConfig{Services: map[tailcfg.ServiceName]*ipn.ServiceConfig{}}}
+func newServiceName(host gatewayv1.Hostname) tailcfg.ServiceName {
+	return tailcfg.AsServiceName(fmt.Sprintf("svc:%s", host))
+}
+
+// newServiceConfig builds a Tailscale service config from a Gateway and options.
+func newServiceConfig(gw *gatewayv1.Gateway, hr *gatewayv1.HTTPRoute) (*ipn.ServiceConfig, error) {
+	web, err := newWebServerConfigs(gw, hr)
+	if err != nil {
+		return nil, err
+	}
+	svc := &ipn.ServiceConfig{
+		TCP: newTCPPortHandlers(gw),
+		Web: web,
+	}
+	return svc, nil
+}
+
+// newTCPPortHandlers builds TCP port handlers for a Gateway.
+func newTCPPortHandlers(gw *gatewayv1.Gateway) map[uint16]*ipn.TCPPortHandler {
+	tcp := map[uint16]*ipn.TCPPortHandler{}
+	for _, l := range gw.Spec.Listeners {
+		switch l.Protocol {
+		case gatewayv1.HTTPProtocolType:
+			tcp[uint16(l.Port)] = &ipn.TCPPortHandler{HTTP: true}
+		case gatewayv1.HTTPSProtocolType:
+			tcp[uint16(l.Port)] = &ipn.TCPPortHandler{HTTPS: true}
+		default:
+			continue
+		}
+	}
+	return tcp
+}
+
+// newWebServerConfigs builds web server configs for a Gateway and service options.
+func newWebServerConfigs(
+	gw *gatewayv1.Gateway,
+	hr *gatewayv1.HTTPRoute,
+) (map[ipn.HostPort]*ipn.WebServerConfig, error) {
+	web := map[ipn.HostPort]*ipn.WebServerConfig{}
+
+	for _, pr := range hr.Spec.ParentRefs {
+		if !isParentGateway(gw, &pr) {
+			continue
+		}
+
+		for _, l := range gw.Spec.Listeners {
+			if !isSupportedProtocol(l.Protocol) {
+				return nil, fmt.Errorf("only HTTP and HTTPS protocols are supported")
+			}
+			if len(hr.Spec.Hostnames) == 0 {
+				return nil, fmt.Errorf("at least one hostname is required")
+			}
+			for _, h := range hr.Spec.Hostnames {
+				addr := ipn.HostPort(fmt.Sprintf("%s:%d", h, l.Port))
+				handlers, err := newHTTPHandlers(hr)
+				if err != nil {
+					return nil, err
+				}
+				web[addr] = &ipn.WebServerConfig{Handlers: handlers}
+			}
+		}
+	}
+
+	return web, nil
+}
+
+// isParentGateway returns true if the parent reference is the gateway.
+func isParentGateway(gw *gatewayv1.Gateway, pr *gatewayv1.ParentReference) bool {
+	gwNs := gatewayv1.Namespace(gw.Namespace)
+	prNs := ptr.Deref(pr.Namespace, gwNs)
+	return string(pr.Name) == string(gw.Name) && (prNs == gwNs)
+}
+
+// isSupportedProtocol returns true if the protocol is supported.
+func isSupportedProtocol(protocol gatewayv1.ProtocolType) bool {
+	return protocol == gatewayv1.HTTPProtocolType || protocol == gatewayv1.HTTPSProtocolType
+}
+
+// newHTTPHandlers builds HTTP handlers for a HTTPRoute.
+func newHTTPHandlers(hr *gatewayv1.HTTPRoute) (map[string]*ipn.HTTPHandler, error) {
+	handlers := map[string]*ipn.HTTPHandler{}
+
+	for _, rule := range hr.Spec.Rules {
+		if len(rule.BackendRefs) > 1 {
+			return nil, fmt.Errorf("multiple BackendRefs in a single rule are not supported")
+		}
+
+		if len(rule.Matches) == 0 {
+			handler, err := newRootHandler(rule.BackendRefs[0])
+			if err != nil {
+				return nil, err
+			}
+			handlers["/"] = handler
+		} else {
+			for _, match := range rule.Matches {
+				if !isSupportedMatch(match) {
+					return nil, fmt.Errorf("only PathMatchPathPrefix is supported")
+				}
+				handler, err := newMatchHandler(rule.BackendRefs[0], match)
+				if err != nil {
+					return nil, err
+				}
+				handlers[*match.Path.Value] = handler
+			}
+		}
+	}
+
+	return handlers, nil
+}
+
+// isSupportedMatch returns true if the match is supported.
+func isSupportedMatch(match gatewayv1.HTTPRouteMatch) bool {
+	if match.Path == nil {
+		return false
+	}
+	if match.Path.Value == nil {
+		return false
+	}
+	return *match.Path.Type == gatewayv1.PathMatchPathPrefix
+}
+
+// newRootHandler builds an HTTP handler for a BackendRef and root path.
+func newRootHandler(br gatewayv1.HTTPBackendRef) (*ipn.HTTPHandler, error) {
+	return newHTTPHandler(br, "/")
+}
+
+// newMatchHandler builds an HTTP handler for a BackendRef and path match.
+func newMatchHandler(
+	br gatewayv1.HTTPBackendRef,
+	match gatewayv1.HTTPRouteMatch,
+) (*ipn.HTTPHandler, error) {
+	if match.Path == nil {
+		return nil, fmt.Errorf("path match is required")
+	}
+	if match.Path.Value == nil {
+		return nil, fmt.Errorf("path match value is required")
+	}
+	return newHTTPHandler(br, *match.Path.Value)
+}
+
+// newHTTPHandler builds an HTTP handler for a BackendRef and path.
+func newHTTPHandler(br gatewayv1.HTTPBackendRef, path string) (*ipn.HTTPHandler, error) {
+	upstream := url.URL{
+		Scheme: "http",
+		Path:   path,
+	}
+	upstream.Host = string(br.Name)
+	if br.Namespace != nil {
+		upstream.Host = fmt.Sprintf("%s.%s", upstream.Host, *br.Namespace)
+	}
+	if br.Port != nil {
+		upstream.Host = fmt.Sprintf("%s:%d", upstream.Host, *br.Port)
+	}
+	return &ipn.HTTPHandler{Proxy: upstream.String()}, nil
 }
 
 // AdvertiseServicesCommand returns a shell command to advertise all services.

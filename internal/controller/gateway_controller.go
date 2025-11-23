@@ -18,6 +18,7 @@ import (
 	applymetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	applyrbacv1 "k8s.io/client-go/applyconfigurations/rbac/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -86,15 +87,6 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
-	// Validate Gateway listeners
-	if err := r.validateListeners(gateway); err != nil {
-		log.Error(err, "Gateway validation failed")
-		if err = r.UpdateGatewayStatus(ctx, gateway, false, ConditionReasonInvalid, err.Error()); err != nil {
-			log.Error(err, "Failed to update Gateway status")
-		}
-		return ctrl.Result{}, nil // Don't retry validation errors immediately
-	}
-
 	if err := r.ReconcilerResources(ctx, gateway); err != nil {
 		log.Error(err, "Failed to manage proxy servers")
 		if err = r.UpdateGatewayStatus(ctx, gateway, false, ConditionReasonNotReady, err.Error()); err != nil {
@@ -111,58 +103,37 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return ctrl.Result{}, nil
 }
 
-// validateListeners validates the Gateway listeners configuration
-func (r *GatewayReconciler) validateListeners(gateway *gatewayv1.Gateway) error {
-	if len(gateway.Spec.Listeners) == 0 {
-		return fmt.Errorf("no listeners configured")
-	}
-
-	for i, listener := range gateway.Spec.Listeners {
-		if listener.Protocol != gatewayv1.HTTPProtocolType &&
-			listener.Protocol != gatewayv1.HTTPSProtocolType {
-			return fmt.Errorf("listener %d: unsupported protocol %s", i, listener.Protocol)
-		}
-
-		if listener.Port < 1 || listener.Port > 65535 {
-			return fmt.Errorf("listener %d: invalid port %d", i, listener.Port)
-		}
-	}
-
-	return nil
-}
-
 // isManagedByController reports whether the Gateway is managed by this controller
 // based on its GatewayClassName.
 func (r *GatewayReconciler) isManagedByController(gw *gatewayv1.Gateway) bool {
 	return gw.Spec.GatewayClassName == GatewayClassName
 }
 
-// getHTTPRoutesForGateway returns all HTTPRoutes that reference the provided
+// listHTTPRoutesForGateway returns all HTTPRoutes that reference the provided
 // Gateway, matching either the same namespace or an explicit ParentRef namespace.
-func (r *GatewayReconciler) getHTTPRoutesForGateway(
+func (r *GatewayReconciler) listHTTPRoutesForGateway(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
-) ([]gatewayv1.HTTPRoute, error) {
-	routesList, err := r.Gateway.GatewayV1().
+) ([]*gatewayv1.HTTPRoute, error) {
+	hrList, err := r.Gateway.GatewayV1().
 		HTTPRoutes(metav1.NamespaceAll).
 		List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list HTTPRoutes: %w", err)
 	}
 
-	var matching []gatewayv1.HTTPRoute
-	for _, route := range routesList.Items {
+	var hrs []*gatewayv1.HTTPRoute
+	for _, route := range hrList.Items {
 		for _, parentRef := range route.Spec.ParentRefs {
-			if parentRef.Name == gatewayv1.ObjectName(gw.Name) {
-				if route.Namespace == gw.Namespace ||
-					(parentRef.Namespace != nil && *parentRef.Namespace == gatewayv1.Namespace(gw.Namespace)) {
-					matching = append(matching, route)
-				}
+			gwNs := gatewayv1.Namespace(gw.Namespace)
+			prNs := ptr.Deref(parentRef.Namespace, gwNs)
+			if parentRef.Name == gatewayv1.ObjectName(gw.Name) && prNs == gwNs {
+				hrs = append(hrs, &route)
 			}
 		}
 	}
 
-	return matching, nil
+	return hrs, nil
 }
 
 // ReconcilerResources ensures all Kubernetes resources and Tailscale
@@ -171,13 +142,13 @@ func (r *GatewayReconciler) ReconcilerResources(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) error {
-	routes, err := r.getHTTPRoutesForGateway(ctx, gw)
+	hrs, err := r.listHTTPRoutesForGateway(ctx, gw)
 	if err != nil {
 		return err
 	}
 	cfg, err := tsconfig.NewConfig(
 		gw,
-		tsconfig.WithHTTPRoutes(routes),
+		tsconfig.WithHTTPRoutes(hrs),
 	)
 	if err != nil {
 		return err
