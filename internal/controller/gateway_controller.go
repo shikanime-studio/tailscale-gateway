@@ -144,25 +144,25 @@ func (r *GatewayReconciler) listHTTPRoutesForGateway(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) ([]*gatewayv1.HTTPRoute, error) {
-	routesList, err := r.Gateway.GatewayV1().
+	hrList, err := r.Gateway.GatewayV1().
 		HTTPRoutes(metav1.NamespaceAll).
 		List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list HTTPRoutes: %w", err)
 	}
 
-	var matching []*gatewayv1.HTTPRoute
-	for _, route := range routesList.Items {
+	var hrs []*gatewayv1.HTTPRoute
+	for _, route := range hrList.Items {
 		for _, parentRef := range route.Spec.ParentRefs {
 			gwNs := gatewayv1.Namespace(gw.Namespace)
 			prNs := ptr.Deref(parentRef.Namespace, gwNs)
 			if parentRef.Name == gatewayv1.ObjectName(gw.Name) && prNs == gwNs {
-				matching = append(matching, &route)
+				hrs = append(hrs, &route)
 			}
 		}
 	}
 
-	return matching, nil
+	return hrs, nil
 }
 
 // ReconcilerResources ensures all Kubernetes resources and Tailscale
@@ -171,13 +171,13 @@ func (r *GatewayReconciler) ReconcilerResources(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) error {
-	routes, err := r.listHTTPRoutesForGateway(ctx, gw)
+	hrs, err := r.listHTTPRoutesForGateway(ctx, gw)
 	if err != nil {
 		return err
 	}
 	cfg, err := tsconfig.NewConfig(
 		gw,
-		tsconfig.WithHTTPRoutes(routes),
+		tsconfig.WithHTTPRoutes(hrs),
 	)
 	if err != nil {
 		return err
