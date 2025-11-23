@@ -18,6 +18,7 @@ import (
 	applymetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	applyrbacv1 "k8s.io/client-go/applyconfigurations/rbac/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -137,12 +138,12 @@ func (r *GatewayReconciler) isManagedByController(gw *gatewayv1.Gateway) bool {
 	return gw.Spec.GatewayClassName == GatewayClassName
 }
 
-// getHTTPRoutesForGateway returns all HTTPRoutes that reference the provided
+// listHTTPRoutesForGateway returns all HTTPRoutes that reference the provided
 // Gateway, matching either the same namespace or an explicit ParentRef namespace.
-func (r *GatewayReconciler) getHTTPRoutesForGateway(
+func (r *GatewayReconciler) listHTTPRoutesForGateway(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
-) ([]gatewayv1.HTTPRoute, error) {
+) ([]*gatewayv1.HTTPRoute, error) {
 	routesList, err := r.Gateway.GatewayV1().
 		HTTPRoutes(metav1.NamespaceAll).
 		List(ctx, metav1.ListOptions{})
@@ -150,14 +151,13 @@ func (r *GatewayReconciler) getHTTPRoutesForGateway(
 		return nil, fmt.Errorf("failed to list HTTPRoutes: %w", err)
 	}
 
-	var matching []gatewayv1.HTTPRoute
+	var matching []*gatewayv1.HTTPRoute
 	for _, route := range routesList.Items {
 		for _, parentRef := range route.Spec.ParentRefs {
-			if parentRef.Name == gatewayv1.ObjectName(gw.Name) {
-				if route.Namespace == gw.Namespace ||
-					(parentRef.Namespace != nil && *parentRef.Namespace == gatewayv1.Namespace(gw.Namespace)) {
-					matching = append(matching, route)
-				}
+			gwNs := gatewayv1.Namespace(gw.Namespace)
+			prNs := ptr.Deref(parentRef.Namespace, gwNs)
+			if parentRef.Name == gatewayv1.ObjectName(gw.Name) && prNs == gwNs {
+				matching = append(matching, &route)
 			}
 		}
 	}
@@ -171,7 +171,7 @@ func (r *GatewayReconciler) ReconcilerResources(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) error {
-	routes, err := r.getHTTPRoutesForGateway(ctx, gw)
+	routes, err := r.listHTTPRoutesForGateway(ctx, gw)
 	if err != nil {
 		return err
 	}

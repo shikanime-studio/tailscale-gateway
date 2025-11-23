@@ -39,7 +39,7 @@ func TestMarshal_WithRouteOptions(t *testing.T) {
 			}},
 		},
 	}
-	cfg, err := NewConfig(gw, WithHTTPRoute(hrHTTP))
+	cfg, err := NewConfig(gw, WithHTTPRoutes([]*gatewayv1.HTTPRoute{hrHTTP}))
 	if err != nil {
 		t.Fatalf("new config failed: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestMarshal_HandlersWithPathMatches(t *testing.T) {
 		},
 	}
 
-	cfg, err := NewConfig(gw, WithHTTPRoute(hr))
+	cfg, err := NewConfig(gw, WithHTTPRoutes([]*gatewayv1.HTTPRoute{hr}))
 	if err != nil {
 		t.Fatalf("new config failed: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestNewConfig_ErrorsOnMultipleBackendRefs(t *testing.T) {
 		},
 	}
 
-	_, err := NewConfig(gw, WithHTTPRoute(hr))
+	_, err := NewConfig(gw, WithHTTPRoutes([]*gatewayv1.HTTPRoute{hr}))
 	if err == nil {
 		t.Fatalf("expected error on multiple BackendRefs, got nil")
 	}
@@ -249,7 +249,7 @@ func TestMarshal_IgnoresNonPrefixPathMatches(t *testing.T) {
 		},
 	}
 
-	cfg, err := NewConfig(gw, WithHTTPRoute(hr))
+	cfg, err := NewConfig(gw, WithHTTPRoutes([]*gatewayv1.HTTPRoute{hr}))
 	if err != nil {
 		t.Fatalf("new config failed: %v", err)
 	}

@@ -333,7 +333,7 @@ func TestServicesApplyBuildsTargets(t *testing.T) {
 	var opts []tsconfig.Option
 	for i := range routes {
 		rt := routes[i]
-		opts = append(opts, tsconfig.WithHTTPRoute(&rt))
+		opts = append(opts, tsconfig.WithHTTPRoutes([]*gatewayv1.HTTPRoute{&rt}))
 	}
 	cfg, err := tsconfig.NewConfig(gw, opts...)
 	if err != nil {
