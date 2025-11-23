@@ -171,7 +171,7 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 											continue
 										}
 										cfg.cfg.Services[svcName].Web[addr].Handlers[path] = &ipn.HTTPHandler{
-											Proxy: upstream,
+											Proxy: fmt.Sprintf("%s%s", upstream, path),
 										}
 									}
 								}
