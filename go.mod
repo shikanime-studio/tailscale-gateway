@@ -5,6 +5,7 @@ go 1.25.3
 require (
 	github.com/spf13/viper v1.18.2
 	github.com/tailscale/hujson v0.0.0-20250605163823-992244df8c5a
+	golang.org/x/sync v0.18.0
 	k8s.io/api v0.32.0
 	k8s.io/apimachinery v0.32.0
 	k8s.io/client-go v0.32.0
