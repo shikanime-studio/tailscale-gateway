@@ -131,10 +131,14 @@ func (r *GatewayReconciler) validateListeners(gateway *gatewayv1.Gateway) error 
 	return nil
 }
 
+// isManagedByController reports whether the Gateway is managed by this controller
+// based on its GatewayClassName.
 func (r *GatewayReconciler) isManagedByController(gw *gatewayv1.Gateway) bool {
 	return gw.Spec.GatewayClassName == GatewayClassName
 }
 
+// getHTTPRoutesForGateway returns all HTTPRoutes that reference the provided
+// Gateway, matching either the same namespace or an explicit ParentRef namespace.
 func (r *GatewayReconciler) getHTTPRoutesForGateway(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
@@ -161,6 +165,8 @@ func (r *GatewayReconciler) getHTTPRoutesForGateway(
 	return matching, nil
 }
 
+// ReconcilerResources ensures all Kubernetes resources and Tailscale
+// configuration for the Gateway are created and up to date, then updates status.
 func (r *GatewayReconciler) ReconcilerResources(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
@@ -191,6 +197,7 @@ func (r *GatewayReconciler) ReconcilerResources(
 	return nil
 }
 
+// ReconcilerServiceAccount applies the ServiceAccount owned by the Gateway.
 func (r *GatewayReconciler) ReconcilerServiceAccount(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
@@ -214,6 +221,8 @@ func (r *GatewayReconciler) ReconcilerServiceAccount(
 	return nil
 }
 
+// ReconcilerRBAC applies the ClusterRoleBinding to grant the Gateway's
+// ServiceAccount required permissions.
 func (r *GatewayReconciler) ReconcilerRBAC(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
@@ -243,10 +252,14 @@ func (r *GatewayReconciler) ReconcilerRBAC(
 	return nil
 }
 
+// clusterRoleBindingName returns the name used for the ClusterRoleBinding
+// associated with the Gateway.
 func (r *GatewayReconciler) clusterRoleBindingName(gw *gatewayv1.Gateway) string {
 	return fmt.Sprintf("%s-%s", gw.Name, gw.Namespace)
 }
 
+// ReconcilerSecret ensures a Secret containing a Tailscale auth key exists for
+// the Gateway, generating a new key when needed.
 func (r *GatewayReconciler) ReconcilerSecret(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
@@ -286,6 +299,8 @@ func (r *GatewayReconciler) ReconcilerSecret(
 	return nil
 }
 
+// tailscaleConfigData returns stringData for a Secret with a newly generated
+// Tailscale auth key using configured tags.
 func (r *GatewayReconciler) tailscaleConfigData(
 	ctx context.Context,
 ) (map[string]string, error) {
@@ -304,6 +319,8 @@ func (r *GatewayReconciler) tailscaleConfigData(
 	return map[string]string{"authkey": key}, nil
 }
 
+// isAuthKeyGenerationNeeded reports whether the existing Secret lacks a valid
+// auth key, indicating a new key should be generated.
 func (r *GatewayReconciler) isAuthKeyGenerationNeeded(existing *corev1.Secret) bool {
 	if existing != nil && existing.Data != nil {
 		if v, ok := existing.Data["authkey"]; ok && len(v) > 0 {
@@ -313,6 +330,8 @@ func (r *GatewayReconciler) isAuthKeyGenerationNeeded(existing *corev1.Secret) b
 	return true
 }
 
+// ReconcilerConfigMap applies a ConfigMap containing Tailscale services
+// configuration derived from HTTPRoutes.
 func (r *GatewayReconciler) ReconcilerConfigMap(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
@@ -343,6 +362,8 @@ func (r *GatewayReconciler) ReconcilerConfigMap(
 	return nil
 }
 
+// tailscaleServicesConfig marshals services configuration to a file map suitable
+// for mounting into the Tailscale container.
 func (r *GatewayReconciler) tailscaleServicesConfig(
 	cfg *tsconfig.Config,
 ) (map[string]string, error) {
@@ -353,6 +374,8 @@ func (r *GatewayReconciler) tailscaleServicesConfig(
 	return map[string]string{"services.hujson": string(servicesConfig)}, nil
 }
 
+// ReconcilerDaemonSet applies the DaemonSet that runs Tailscale on all nodes and
+// configures lifecycle hooks to advertise and drain services.
 func (r *GatewayReconciler) ReconcilerDaemonSet(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
@@ -486,6 +509,7 @@ func (r *GatewayReconciler) ReconcilerDaemonSet(
 	return nil
 }
 
+// selectorLabels returns labels used to select and identify Gateway pods.
 func (r *GatewayReconciler) selectorLabels(gw *gatewayv1.Gateway) map[string]string {
 	selectorLabels := gw.Labels
 	if selectorLabels == nil {
@@ -496,6 +520,8 @@ func (r *GatewayReconciler) selectorLabels(gw *gatewayv1.Gateway) map[string]str
 	return selectorLabels
 }
 
+// UpdateGatewayStatus sets Gateway conditions, listener statuses, and addresses
+// based on readiness and the current reconciliation outcome.
 func (r *GatewayReconciler) UpdateGatewayStatus(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,

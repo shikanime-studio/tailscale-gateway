@@ -20,6 +20,8 @@ import (
 	gwfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 )
 
+// TestGatewayReconciler_Reconcile verifies reconciliation updates Gateway
+// status appropriately and applies dependent resources without errors.
 func TestGatewayReconciler_Reconcile(t *testing.T) {
 	// Setup test environment
 	s := runtime.NewScheme()
@@ -227,6 +229,8 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 	}
 }
 
+// TestGatewayReconciler_validateListeners validates that listener protocol and
+// port constraints are enforced.
 func TestGatewayReconciler_validateListeners(t *testing.T) {
 	r := &GatewayReconciler{}
 
@@ -289,6 +293,8 @@ func TestGatewayReconciler_validateListeners(t *testing.T) {
 	}
 }
 
+// TestServicesApplyBuildsTargets ensures that TCP targets are set for
+// advertised services using listener ports.
 func TestServicesApplyBuildsTargets(t *testing.T) {
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-gateway", Namespace: "default"},
@@ -359,10 +365,12 @@ func TestServicesApplyBuildsTargets(t *testing.T) {
 }
 
 // Helper function to create pointers
+// ptrTo returns a pointer to the provided value.
 func ptrTo[T any](v T) *T {
 	return &v
 }
 
+// TestMain configures logging before running the test suite.
 func TestMain(m *testing.M) {
 	// Set up logging for tests
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))

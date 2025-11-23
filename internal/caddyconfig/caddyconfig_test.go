@@ -8,6 +8,8 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// TestNewCaddyConfig_GeneratesCaddyfile verifies that the generated Caddyfile
+// contains the expected site address and reverse_proxy upstream.
 func TestNewCaddyConfig_GeneratesCaddyfile(t *testing.T) {
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-gw", Namespace: "default"},
@@ -54,4 +56,5 @@ func TestNewCaddyConfig_GeneratesCaddyfile(t *testing.T) {
 	}
 }
 
+// ptrTo returns a pointer to the provided value.
 func ptrTo[T any](v T) *T { return &v }

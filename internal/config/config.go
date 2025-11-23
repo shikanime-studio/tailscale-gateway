@@ -22,6 +22,7 @@ func New() (*Config, error) {
 	v.SetDefault("ts_tailnet", "")
 	v.SetDefault("ts_oauth_client_id", "")
 	v.SetDefault("ts_oauth_client_secret", "")
+	v.SetDefault("ts_key_description", "Ephemeral auth key for gateway provisioning")
 
 	if err := v.BindEnv("metrics_bind_address", "METRICS_BIND_ADDRESS"); err != nil {
 		return nil, err
@@ -47,12 +48,17 @@ func New() (*Config, error) {
 	if err := v.BindEnv("ts_oauth_client_secret", "TAILSCALE_OAUTH_CLIENT_SECRET", "ts_oauth_client_secret"); err != nil {
 		return nil, err
 	}
+	if err := v.BindEnv("ts_key_description", "TAILSCALE_KEY_DESCRIPTION", "ts_key_description"); err != nil {
+		return nil, err
+	}
 
 	return &Config{v: v}, nil
 }
 
 // GetMetricsBindAddress returns the metrics server bind address.
-func (c *Config) GetMetricsBindAddress() string { return c.v.GetString("metrics_bind_address") }
+func (c *Config) GetMetricsBindAddress() string {
+	return c.v.GetString("metrics_bind_address")
+}
 
 // GetHealthProbeBindAddress returns the health probe bind address.
 func (c *Config) GetHealthProbeBindAddress() string {
@@ -60,10 +66,14 @@ func (c *Config) GetHealthProbeBindAddress() string {
 }
 
 // GetTailscaleAuthKey returns the optional Tailscale auth key.
-func (c *Config) GetTailscaleAuthKey() string { return c.v.GetString("ts_auth_key") }
+func (c *Config) GetTailscaleAuthKey() string {
+	return c.v.GetString("ts_auth_key")
+}
 
 // GetTailscaleImage returns the tailscale daemon container image.
-func (c *Config) GetTailscaleImage() string { return c.v.GetString("ts_image") }
+func (c *Config) GetTailscaleImage() string {
+	return c.v.GetString("ts_image")
+}
 
 // GetTailscaleTags returns comma-separated tags from env, defaulting to ["tag:gateway"].
 func (c *Config) GetTailscaleTags() []string {
@@ -85,8 +95,17 @@ func (c *Config) GetTailscaleTags() []string {
 	return tags
 }
 
-func (c *Config) GetTailscaleTailnet() string       { return c.v.GetString("ts_tailnet") }
-func (c *Config) GetTailscaleOAuthClientID() string { return c.v.GetString("ts_oauth_client_id") }
+// GetTailscaleOAuthClientID returns the OAuth client ID used for Tailscale API access.
+func (c *Config) GetTailscaleOAuthClientID() string {
+	return c.v.GetString("ts_oauth_client_id")
+}
+
+// GetTailscaleOAuthClientSecret returns the OAuth client secret used for Tailscale API access.
 func (c *Config) GetTailscaleOAuthClientSecret() string {
 	return c.v.GetString("ts_oauth_client_secret")
+}
+
+// GetTailscaleKeyDescription returns the description assigned to generated Tailscale auth keys.
+func (c *Config) GetTailscaleKeyDescription() string {
+	return c.v.GetString("ts_key_description")
 }
