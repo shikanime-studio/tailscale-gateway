@@ -174,7 +174,7 @@ func (r *GatewayReconciler) ReconcilerServiceAccount(
 	gw *gatewayv1.Gateway,
 ) error {
 	owner := applymetav1.OwnerReference().
-		WithAPIVersion("gateway.networking.k8s.io/v1").
+		WithAPIVersion(gatewayv1.SchemeGroupVersion.String()).
 		WithKind("Gateway").
 		WithName(gw.Name).
 		WithUID(gw.UID)
@@ -203,7 +203,7 @@ func (r *GatewayReconciler) ReconcilerRBAC(
 	}
 
 	owner := applymetav1.OwnerReference().
-		WithAPIVersion("gateway.networking.k8s.io/v1").
+		WithAPIVersion(gatewayv1.SchemeGroupVersion.String()).
 		WithKind("Gateway").
 		WithName(gw.Name).
 		WithUID(gw.UID)
@@ -245,7 +245,7 @@ func (r *GatewayReconciler) ReconcilerSecret(
 	}
 
 	owner := applymetav1.OwnerReference().
-		WithAPIVersion("gateway.networking.k8s.io/v1").
+		WithAPIVersion(gatewayv1.SchemeGroupVersion.String()).
 		WithKind("Gateway").
 		WithName(gw.Name).
 		WithUID(gw.UID)
@@ -314,7 +314,7 @@ func (r *GatewayReconciler) ReconcilerConfigMap(
 	}
 
 	owner := applymetav1.OwnerReference().
-		WithAPIVersion("gateway.networking.k8s.io/v1").
+		WithAPIVersion(gatewayv1.SchemeGroupVersion.String()).
 		WithKind("Gateway").
 		WithName(gw.Name).
 		WithUID(gw.UID)
@@ -364,7 +364,7 @@ func (r *GatewayReconciler) ReconcilerDaemonSet(
 	selectorLabels := r.selectorLabels(gw)
 
 	owner := applymetav1.OwnerReference().
-		WithAPIVersion("gateway.networking.k8s.io/v1").
+		WithAPIVersion(gatewayv1.SchemeGroupVersion.String()).
 		WithKind("Gateway").
 		WithName(gw.Name).
 		WithUID(gw.UID)
