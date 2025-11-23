@@ -10,7 +10,6 @@ A Kubernetes controller that provisions a Tailscale-based Gateway. It reconciles
 - `TAILSCALE_TAGS`: Comma-separated device tags applied to generated auth keys (e.g. `tag:gateway,tag:proxy`)
 - `TS_IMAGE`: Tailscale daemon image (default `tailscale/tailscale:latest`)
 - `TS_AUTHKEY` (optional/legacy): If set, used directly; otherwise an auth key is generated automatically
-- `TS_CERT_DOMAIN` (optional): DNS suffix used for certificates
 
 The controller reads these via the `internal/config` package. Tags are parsed from `TAILSCALE_TAGS` and default to `tag:gateway` when unset.
 

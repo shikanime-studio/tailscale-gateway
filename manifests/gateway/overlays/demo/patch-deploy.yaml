@@ -9,5 +9,5 @@ spec:
       containers:
         - name: controller
           env:
-            - name: TS_CERT_DOMAIN
+            - name: TAILSCALE_TAILNET
               value: tail70d29d.ts.net
