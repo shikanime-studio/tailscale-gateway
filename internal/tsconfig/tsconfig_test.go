@@ -1,4 +1,4 @@
-package tailscaleconfig
+package tsconfig
 
 import (
 	"encoding/json"
