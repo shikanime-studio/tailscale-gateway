@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
-	tailscaleconfig "github.com/shikanime-studio/tailscale-gateway/internal/tailscaleconfig"
+	tsconfig "github.com/shikanime-studio/tailscale-gateway/internal/tsconfig"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,6 +20,8 @@ import (
 	gwfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 )
 
+// TestGatewayReconciler_Reconcile verifies reconciliation updates Gateway
+// status appropriately and applies dependent resources without errors.
 func TestGatewayReconciler_Reconcile(t *testing.T) {
 	// Setup test environment
 	s := runtime.NewScheme()
@@ -227,6 +229,8 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 	}
 }
 
+// TestGatewayReconciler_validateListeners validates that listener protocol and
+// port constraints are enforced.
 func TestGatewayReconciler_validateListeners(t *testing.T) {
 	r := &GatewayReconciler{}
 
@@ -289,6 +293,8 @@ func TestGatewayReconciler_validateListeners(t *testing.T) {
 	}
 }
 
+// TestServicesApplyBuildsTargets ensures that TCP targets are set for
+// advertised services using listener ports.
 func TestServicesApplyBuildsTargets(t *testing.T) {
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-gateway", Namespace: "default"},
@@ -324,16 +330,16 @@ func TestServicesApplyBuildsTargets(t *testing.T) {
 		},
 	}
 
-	var opts []tailscaleconfig.Option
+	var opts []tsconfig.Option
 	for i := range routes {
 		rt := routes[i]
-		opts = append(opts, tailscaleconfig.WithHTTPRoute(&rt))
+		opts = append(opts, tsconfig.WithHTTPRoute(&rt))
 	}
-	cfg, err := tailscaleconfig.NewConfig(gw, opts...)
+	cfg, err := tsconfig.NewConfig(gw, opts...)
 	if err != nil {
 		t.Fatalf("new config failed: %v", err)
 	}
-	outBytes, err := tailscaleconfig.Marshal(cfg)
+	outBytes, err := tsconfig.Marshal(cfg)
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
 	}
@@ -359,10 +365,12 @@ func TestServicesApplyBuildsTargets(t *testing.T) {
 }
 
 // Helper function to create pointers
+// ptrTo returns a pointer to the provided value.
 func ptrTo[T any](v T) *T {
 	return &v
 }
 
+// TestMain configures logging before running the test suite.
 func TestMain(m *testing.M) {
 	// Set up logging for tests
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))

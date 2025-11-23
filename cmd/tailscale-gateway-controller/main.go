@@ -25,11 +25,14 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+// init registers Kubernetes and Gateway API schemes used by the manager.
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.AddToScheme(scheme))
 }
 
+// main starts the controller manager and sets up the Gateway reconciler and
+// health probes, then blocks until shutdown signal.
 func main() {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 

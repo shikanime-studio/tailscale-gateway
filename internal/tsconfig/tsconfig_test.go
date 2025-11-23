@@ -1,4 +1,4 @@
-package tailscaleconfig
+package tsconfig
 
 import (
 	"encoding/json"
@@ -8,6 +8,8 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// TestMarshal_WithRouteOptions verifies TCP and Web handlers are created for
+// routes referencing the Gateway without explicit hostnames.
 func TestMarshal_WithRouteOptions(t *testing.T) {
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-gw"},
@@ -88,6 +90,8 @@ func TestMarshal_WithRouteOptions(t *testing.T) {
 	}
 }
 
+// TestMarshal_HandlersWithPathMatches ensures prefix path matches are encoded
+// as handlers and point to the configured upstream.
 func TestMarshal_HandlersWithPathMatches(t *testing.T) {
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-gw"},
@@ -160,6 +164,8 @@ func TestMarshal_HandlersWithPathMatches(t *testing.T) {
 	}
 }
 
+// TestNewConfig_ErrorsOnMultipleBackendRefs asserts an error is returned when a
+// single rule contains multiple backend references.
 func TestNewConfig_ErrorsOnMultipleBackendRefs(t *testing.T) {
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-gw"},
@@ -205,6 +211,8 @@ func TestNewConfig_ErrorsOnMultipleBackendRefs(t *testing.T) {
 	}
 }
 
+// TestMarshal_IgnoresNonPrefixPathMatches confirms non-prefix path matches are
+// ignored when building handlers.
 func TestMarshal_IgnoresNonPrefixPathMatches(t *testing.T) {
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-gw"},
@@ -286,4 +294,5 @@ func TestMarshal_IgnoresNonPrefixPathMatches(t *testing.T) {
 	}
 }
 
+// ptrTo returns a pointer to the provided value.
 func ptrTo[T any](v T) *T { return &v }

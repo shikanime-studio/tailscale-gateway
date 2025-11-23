@@ -5,7 +5,8 @@ import (
 	"fmt"
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
-	"github.com/shikanime-studio/tailscale-gateway/internal/tailscaleconfig"
+	"github.com/shikanime-studio/tailscale-gateway/internal/tsclient"
+	"github.com/shikanime-studio/tailscale-gateway/internal/tsconfig"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -81,7 +82,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Check if the Gateway is managed by this controller
-	if gateway.Spec.GatewayClassName != GatewayClassName {
+	if !r.isManagedByController(gateway) {
 		return ctrl.Result{}, nil
 	}
 
@@ -130,6 +131,14 @@ func (r *GatewayReconciler) validateListeners(gateway *gatewayv1.Gateway) error 
 	return nil
 }
 
+// isManagedByController reports whether the Gateway is managed by this controller
+// based on its GatewayClassName.
+func (r *GatewayReconciler) isManagedByController(gw *gatewayv1.Gateway) bool {
+	return gw.Spec.GatewayClassName == GatewayClassName
+}
+
+// getHTTPRoutesForGateway returns all HTTPRoutes that reference the provided
+// Gateway, matching either the same namespace or an explicit ParentRef namespace.
 func (r *GatewayReconciler) getHTTPRoutesForGateway(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
@@ -156,6 +165,8 @@ func (r *GatewayReconciler) getHTTPRoutesForGateway(
 	return matching, nil
 }
 
+// ReconcilerResources ensures all Kubernetes resources and Tailscale
+// configuration for the Gateway are created and up to date, then updates status.
 func (r *GatewayReconciler) ReconcilerResources(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
@@ -164,9 +175,9 @@ func (r *GatewayReconciler) ReconcilerResources(
 	if err != nil {
 		return err
 	}
-	cfg, err := tailscaleconfig.NewConfig(
+	cfg, err := tsconfig.NewConfig(
 		gw,
-		tailscaleconfig.WithHTTPRoutes(routes),
+		tsconfig.WithHTTPRoutes(routes),
 	)
 	if err != nil {
 		return err
@@ -186,6 +197,7 @@ func (r *GatewayReconciler) ReconcilerResources(
 	return nil
 }
 
+// ReconcilerServiceAccount applies the ServiceAccount owned by the Gateway.
 func (r *GatewayReconciler) ReconcilerServiceAccount(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
@@ -209,6 +221,8 @@ func (r *GatewayReconciler) ReconcilerServiceAccount(
 	return nil
 }
 
+// ReconcilerRBAC applies the ClusterRoleBinding to grant the Gateway's
+// ServiceAccount required permissions.
 func (r *GatewayReconciler) ReconcilerRBAC(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
@@ -238,23 +252,36 @@ func (r *GatewayReconciler) ReconcilerRBAC(
 	return nil
 }
 
+// clusterRoleBindingName returns the name used for the ClusterRoleBinding
+// associated with the Gateway.
 func (r *GatewayReconciler) clusterRoleBindingName(gw *gatewayv1.Gateway) string {
 	return fmt.Sprintf("%s-%s", gw.Name, gw.Namespace)
 }
 
+// ReconcilerSecret ensures a Secret containing a Tailscale auth key exists for
+// the Gateway, generating a new key when needed.
 func (r *GatewayReconciler) ReconcilerSecret(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) error {
+	existing, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
+	if err == nil {
+		if !r.isAuthKeyGenerationNeeded(existing) {
+			return nil
+		}
+	} else if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("failed to get existing secret: %w", err)
+	}
+
 	owner := applymetav1.OwnerReference().
 		WithAPIVersion("gateway.networking.k8s.io/v1").
 		WithKind("Gateway").
 		WithName(gw.Name).
 		WithUID(gw.UID)
 
-	stringData := map[string]string{}
-	if v := r.Cfg.GetTailscaleAuthKey(); v != "" {
-		stringData["authkey"] = v
+	stringData, err := r.tailscaleConfigData(ctx)
+	if err != nil {
+		return err
 	}
 
 	apply := applycorev1.Secret(gw.Name, gw.Namespace).
@@ -272,14 +299,47 @@ func (r *GatewayReconciler) ReconcilerSecret(
 	return nil
 }
 
+// tailscaleConfigData returns stringData for a Secret with a newly generated
+// Tailscale auth key using configured tags.
+func (r *GatewayReconciler) tailscaleConfigData(
+	ctx context.Context,
+) (map[string]string, error) {
+	tags := r.Cfg.GetTailscaleTags()
+	tsClient, err := tsclient.New(r.Cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize tailscale client: %w", err)
+	}
+	key, err := tsClient.CreateAuthKey(ctx, tags)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate tailscale auth key: %w", err)
+	}
+	if key == "" {
+		return nil, fmt.Errorf("generated empty tailscale auth key")
+	}
+	return map[string]string{"authkey": key}, nil
+}
+
+// isAuthKeyGenerationNeeded reports whether the existing Secret lacks a valid
+// auth key, indicating a new key should be generated.
+func (r *GatewayReconciler) isAuthKeyGenerationNeeded(existing *corev1.Secret) bool {
+	if existing != nil && existing.Data != nil {
+		if v, ok := existing.Data["authkey"]; ok && len(v) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// ReconcilerConfigMap applies a ConfigMap containing Tailscale services
+// configuration derived from HTTPRoutes.
 func (r *GatewayReconciler) ReconcilerConfigMap(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
-	cfg *tailscaleconfig.Config,
+	cfg *tsconfig.Config,
 ) error {
-	servicesConfig, err := tailscaleconfig.Marshal(cfg)
+	data, err := r.tailscaleServicesConfig(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to marshal services config: %w", err)
+		return err
 	}
 
 	owner := applymetav1.OwnerReference().
@@ -290,7 +350,7 @@ func (r *GatewayReconciler) ReconcilerConfigMap(
 
 	apply := applycorev1.ConfigMap(gw.Name, gw.Namespace).
 		WithLabels(gw.Labels).
-		WithData(map[string]string{"services.hujson": string(servicesConfig)}).
+		WithData(data).
 		WithOwnerReferences(owner)
 
 	if _, err = r.Kube.CoreV1().
@@ -302,16 +362,30 @@ func (r *GatewayReconciler) ReconcilerConfigMap(
 	return nil
 }
 
+// tailscaleServicesConfig marshals services configuration to a file map suitable
+// for mounting into the Tailscale container.
+func (r *GatewayReconciler) tailscaleServicesConfig(
+	cfg *tsconfig.Config,
+) (map[string]string, error) {
+	servicesConfig, err := tsconfig.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal services config: %w", err)
+	}
+	return map[string]string{"services.hujson": string(servicesConfig)}, nil
+}
+
+// ReconcilerDaemonSet applies the DaemonSet that runs Tailscale on all nodes and
+// configures lifecycle hooks to advertise and drain services.
 func (r *GatewayReconciler) ReconcilerDaemonSet(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
-	cfg *tailscaleconfig.Config,
+	cfg *tsconfig.Config,
 ) error {
-	postStartCmd, err := tailscaleconfig.AdvertiseServicesCommand(cfg)
+	postStartCmd, err := tsconfig.AdvertiseServicesCommand(cfg)
 	if err != nil {
 		return err
 	}
-	preStopCmd, err := tailscaleconfig.DrainServicesCommand(cfg)
+	preStopCmd, err := tsconfig.DrainServicesCommand(cfg)
 	if err != nil {
 		return err
 	}
@@ -435,6 +509,7 @@ func (r *GatewayReconciler) ReconcilerDaemonSet(
 	return nil
 }
 
+// selectorLabels returns labels used to select and identify Gateway pods.
 func (r *GatewayReconciler) selectorLabels(gw *gatewayv1.Gateway) map[string]string {
 	selectorLabels := gw.Labels
 	if selectorLabels == nil {
@@ -445,6 +520,8 @@ func (r *GatewayReconciler) selectorLabels(gw *gatewayv1.Gateway) map[string]str
 	return selectorLabels
 }
 
+// UpdateGatewayStatus sets Gateway conditions, listener statuses, and addresses
+// based on readiness and the current reconciliation outcome.
 func (r *GatewayReconciler) UpdateGatewayStatus(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
