@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gateway "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
@@ -49,6 +50,9 @@ const (
 	ConditionReasonNoListeners = "NoListeners"
 	// ConditionReasonProgrammed indicates that listeners are programmed.
 	ConditionReasonProgrammed = "Programmed"
+
+	// FinalizerTailscale is the finalizer used to clean up Tailscale resources
+	FinalizerTailscale = "tailscale.net/finalizer"
 )
 
 // NewGatewayReconciler creates a new GatewayReconciler
@@ -87,9 +91,26 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.ReconcilerResources(ctx, gateway); err != nil {
+	// examine DeletionTimestamp to determine if object is under deletion
+	if gateway.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is not being deleted, so if it does not have our finalizer,
+		// then let's add the finalizer and update the object. This is equivalent
+		// to registering our finalizer.
+		if err := r.updateGatewayFinalizer(ctx, gateway); err != nil {
+			return ctrl.Result{}, err
+		}
+	} else {
+		// The object is being deleted
+		if err := r.finalizeGateway(ctx, gateway); err != nil {
+			return ctrl.Result{}, err
+		}
+		// Stop reconciliation as the item is being deleted
+		return ctrl.Result{}, nil
+	}
+
+	if err := r.reconcileResources(ctx, gateway); err != nil {
 		log.Error(err, "Failed to manage proxy servers")
-		if err = r.UpdateGatewayStatus(ctx, gateway, false, ConditionReasonNotReady, err.Error()); err != nil {
+		if err = r.updateGatewayStatus(ctx, gateway, false, ConditionReasonNotReady, err.Error()); err != nil {
 			log.Error(err, "Failed to update Gateway status")
 		}
 		return ctrl.Result{}, err
@@ -107,6 +128,57 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 // based on its GatewayClassName.
 func (r *GatewayReconciler) isManagedByController(gw *gatewayv1.Gateway) bool {
 	return gw.Spec.GatewayClassName == GatewayClassName
+}
+
+// addFinalizer adds the finalizer to the Gateway if it does not already have it.
+func (r *GatewayReconciler) updateGatewayFinalizer(
+	ctx context.Context,
+	gw *gatewayv1.Gateway,
+) error {
+	if !controllerutil.ContainsFinalizer(gw, FinalizerTailscale) {
+		controllerutil.AddFinalizer(gw, FinalizerTailscale)
+		if _, err := r.Gateway.GatewayV1().
+			Gateways(gw.Namespace).
+			Update(ctx, gw, metav1.UpdateOptions{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// finalizeGateway handles any external dependencies and removes the finalizer.
+func (r *GatewayReconciler) finalizeGateway(ctx context.Context, gw *gatewayv1.Gateway) error {
+	// The object is being deleted
+	if controllerutil.ContainsFinalizer(gw, FinalizerTailscale) {
+		// our finalizer is present, so let's handle any external dependency
+
+		tsClient, err := tsclient.New(r.Cfg)
+		if err != nil {
+			return err
+		}
+		sec, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		if sec.Data != nil {
+			if b, ok := sec.Data["device_id"]; ok {
+				devID := string(b)
+				if devID != "" {
+					if err = tsClient.DeleteDevice(ctx, devID); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		// remove our finalizer from the list and update it.
+		controllerutil.RemoveFinalizer(gw, FinalizerTailscale)
+		if _, err := r.Gateway.GatewayV1().
+			Gateways(gw.Namespace).
+			Update(ctx, gw, metav1.UpdateOptions{}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // listHTTPRoutesForGateway returns all HTTPRoutes that reference the provided
@@ -136,9 +208,9 @@ func (r *GatewayReconciler) listHTTPRoutesForGateway(
 	return hrs, nil
 }
 
-// ReconcilerResources ensures all Kubernetes resources and Tailscale
+// reconcileResources ensures all Kubernetes resources and Tailscale
 // configuration for the Gateway are created and up to date, then updates status.
-func (r *GatewayReconciler) ReconcilerResources(
+func (r *GatewayReconciler) reconcileResources(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) error {
@@ -154,22 +226,22 @@ func (r *GatewayReconciler) ReconcilerResources(
 		return err
 	}
 	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return r.ReconcilerServiceAccount(gctx, gw) })
-	g.Go(func() error { return r.ReconcilerRBAC(gctx, gw) })
-	g.Go(func() error { return r.ReconcilerSecret(gctx, gw) })
-	g.Go(func() error { return r.ReconcilerConfigMap(gctx, gw, cfg) })
-	g.Go(func() error { return r.ReconcilerDaemonSet(gctx, gw, cfg) })
+	g.Go(func() error { return r.reconcileServiceAccount(gctx, gw) })
+	g.Go(func() error { return r.reconcileRBAC(gctx, gw) })
+	g.Go(func() error { return r.reconcileSecret(gctx, gw) })
+	g.Go(func() error { return r.reconcileConfigMap(gctx, gw, cfg) })
+	g.Go(func() error { return r.reconcileDaemonSet(gctx, gw, cfg) })
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	if err := r.UpdateGatewayStatus(ctx, gw, true, ConditionReasonReady, "Gateway is ready"); err != nil {
+	if err := r.updateGatewayStatus(ctx, gw, true, ConditionReasonReady, "Gateway is ready"); err != nil {
 		return err
 	}
 	return nil
 }
 
-// ReconcilerServiceAccount applies the ServiceAccount owned by the Gateway.
-func (r *GatewayReconciler) ReconcilerServiceAccount(
+// reconcileServiceAccount applies the ServiceAccount owned by the Gateway.
+func (r *GatewayReconciler) reconcileServiceAccount(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) error {
@@ -192,13 +264,13 @@ func (r *GatewayReconciler) ReconcilerServiceAccount(
 	return nil
 }
 
-// ReconcilerRBAC applies the ClusterRoleBinding to grant the Gateway's
+// reconcileRBAC applies the ClusterRoleBinding to grant the Gateway's
 // ServiceAccount required permissions.
-func (r *GatewayReconciler) ReconcilerRBAC(
+func (r *GatewayReconciler) reconcileRBAC(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) error {
-	if err := r.ReconcilerServiceAccount(ctx, gw); err != nil {
+	if err := r.reconcileServiceAccount(ctx, gw); err != nil {
 		return fmt.Errorf("failed to create service account: %w", err)
 	}
 
@@ -229,9 +301,9 @@ func (r *GatewayReconciler) clusterRoleBindingName(gw *gatewayv1.Gateway) string
 	return fmt.Sprintf("%s-%s", gw.Name, gw.Namespace)
 }
 
-// ReconcilerSecret ensures a Secret containing a Tailscale auth key exists for
+// reconcileSecret ensures a Secret containing a Tailscale auth key exists for
 // the Gateway, generating a new key when needed.
-func (r *GatewayReconciler) ReconcilerSecret(
+func (r *GatewayReconciler) reconcileSecret(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) error {
@@ -300,9 +372,9 @@ func (r *GatewayReconciler) isAuthKeyGenerationNeeded(existing *corev1.Secret) b
 	return true
 }
 
-// ReconcilerConfigMap applies a ConfigMap containing Tailscale services
+// reconcileConfigMap applies a ConfigMap containing Tailscale services
 // configuration derived from HTTPRoutes.
-func (r *GatewayReconciler) ReconcilerConfigMap(
+func (r *GatewayReconciler) reconcileConfigMap(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 	cfg *tsconfig.Config,
@@ -344,9 +416,9 @@ func (r *GatewayReconciler) tailscaleServicesConfig(
 	return map[string]string{"services.hujson": string(servicesConfig)}, nil
 }
 
-// ReconcilerDaemonSet applies the DaemonSet that runs Tailscale on all nodes and
+// reconcileDaemonSet applies the DaemonSet that runs Tailscale on all nodes and
 // configures lifecycle hooks to advertise and drain services.
-func (r *GatewayReconciler) ReconcilerDaemonSet(
+func (r *GatewayReconciler) reconcileDaemonSet(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 	cfg *tsconfig.Config,
@@ -490,9 +562,9 @@ func (r *GatewayReconciler) selectorLabels(gw *gatewayv1.Gateway) map[string]str
 	return selectorLabels
 }
 
-// UpdateGatewayStatus sets Gateway conditions, listener statuses, and addresses
+// updateGatewayStatus sets Gateway conditions, listener statuses, and addresses
 // based on readiness and the current reconciliation outcome.
-func (r *GatewayReconciler) UpdateGatewayStatus(
+func (r *GatewayReconciler) updateGatewayStatus(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 	ready bool,
