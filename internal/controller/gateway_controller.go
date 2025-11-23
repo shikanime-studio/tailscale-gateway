@@ -87,15 +87,6 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
-	// Validate Gateway listeners
-	if err := r.validateListeners(gateway); err != nil {
-		log.Error(err, "Gateway validation failed")
-		if err = r.UpdateGatewayStatus(ctx, gateway, false, ConditionReasonInvalid, err.Error()); err != nil {
-			log.Error(err, "Failed to update Gateway status")
-		}
-		return ctrl.Result{}, nil // Don't retry validation errors immediately
-	}
-
 	if err := r.ReconcilerResources(ctx, gateway); err != nil {
 		log.Error(err, "Failed to manage proxy servers")
 		if err = r.UpdateGatewayStatus(ctx, gateway, false, ConditionReasonNotReady, err.Error()); err != nil {
@@ -110,26 +101,6 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		fmt.Sprintf("%s-%s", gateway.Namespace, gateway.Name),
 	)
 	return ctrl.Result{}, nil
-}
-
-// validateListeners validates the Gateway listeners configuration
-func (r *GatewayReconciler) validateListeners(gateway *gatewayv1.Gateway) error {
-	if len(gateway.Spec.Listeners) == 0 {
-		return fmt.Errorf("no listeners configured")
-	}
-
-	for i, listener := range gateway.Spec.Listeners {
-		if listener.Protocol != gatewayv1.HTTPProtocolType &&
-			listener.Protocol != gatewayv1.HTTPSProtocolType {
-			return fmt.Errorf("listener %d: unsupported protocol %s", i, listener.Protocol)
-		}
-
-		if listener.Port < 1 || listener.Port > 65535 {
-			return fmt.Errorf("listener %d: invalid port %d", i, listener.Port)
-		}
-	}
-
-	return nil
 }
 
 // isManagedByController reports whether the Gateway is managed by this controller
