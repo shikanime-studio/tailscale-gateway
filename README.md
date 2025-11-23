@@ -1,159 +1,66 @@
-# Tailscale Gateway API Controller
+# Tailscale Gateway Controller
 
-Kubernetes controller that integrates the Gateway API with Tailscale. For each
-`Gateway`, it provisions a per-node proxy DaemonSet that bridges Tailscale Serve
-to cluster `Service`s discovered from `HTTPRoute`s.
+A Kubernetes controller that provisions a Tailscale-based Gateway. It reconciles supporting resources (ServiceAccount, RBAC, Secret, ConfigMap, DaemonSet) and serves HTTPRoutes via Tailscale Serve.
 
-## Overview
+## Environment Configuration
 
-- Reconciles `Gateway` resources and discovers referenced `HTTPRoute`s
-- Generates Tailscale Serve HUJSON config to proxy directly to Kubernetes `Service`s
-- Applies `ConfigMap` and a DaemonSet with a `tailscale` container
-- Updates `Gateway` status and listener conditions; publishes a hostname address
+- `TAILSCALE_TAILNET`: Tailnet identifier used for API calls
+- `TAILSCALE_OAUTH_CLIENT_ID`: OAuth client ID with scopes allowing key creation
+- `TAILSCALE_OAUTH_CLIENT_SECRET`: OAuth client secret
+- `TAILSCALE_TAGS`: Comma-separated device tags applied to generated auth keys (e.g. `tag:gateway,tag:proxy`)
+- `TS_IMAGE`: Tailscale daemon image (default `tailscale/tailscale:latest`)
+- `TS_AUTHKEY` (optional/legacy): If set, used directly; otherwise an auth key is generated automatically
+- `TS_CERT_DOMAIN` (optional): DNS suffix used for certificates
 
-## Install
+The controller reads these via the `internal/config` package. Tags are parsed from `TAILSCALE_TAGS` and default to `tag:gateway` when unset.
 
-### Prerequisites
+## Auth Key Handling
 
-- A Kubernetes cluster and `kubectl`
-- Tailscale account and auth key
+- The controller checks for a Secret named `<gateway-name>` in the Gateway namespace.
+- If the Secret contains `authkey`, it is left unchanged.
+- If missing, the controller generates a non-reusable, ephemeral, preauthorized auth key using the official Tailscale client (`tailscale.com/client/tailscale/v2`).
+- Tags for the key are sourced from `TAILSCALE_TAGS`.
 
-### Install Gateway API CRDs
+Security note: Prefer OAuth-based key generation over storing reusable keys. If you must provide a key, inject via `TS_AUTHKEY` and avoid committing secrets to source control.
 
-Install the Gateway API CRDs from the Standard channel:
+## Reconciliation Flow
 
-```bash
-kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
+- Listener validation for supported protocols and ports
+- HTTPRoute discovery bound to the Gateway
+- Tailscale Serve configuration build and ConfigMap creation (`services.hujson`)
+- Resource reconciliation:
+  - ServiceAccount
+  - RBAC (ClusterRoleBinding)
+  - Secret (auth key)
+  - ConfigMap (serve config)
+  - DaemonSet (pods run Tailscale with postStart drain/advertise lifecycle)
+- Resource application uses server-side apply
+- Parallelization: Independent resources (SA/RBAC/Secret/ConfigMap/DaemonSet) run concurrently
+- Status updated to Ready upon success, including a hostname `<namespace>-<name>`
+
+## Running Locally
+
+- Set environment variables:
+
+```
+export TAILSCALE_TAILNET=example.com
+export TAILSCALE_OAUTH_CLIENT_ID=...
+export TAILSCALE_OAUTH_CLIENT_SECRET=...
+export TAILSCALE_TAGS="tag:gateway"
 ```
 
-Alternatively, install the Experimental channel:
+- Build: `go build ./...`
+- Deploy the controller to your cluster and create a Gateway with `gatewayClassName: tailscale`.
 
-```bash
-kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/experimental-install.yaml
-```
+## Migration Notes
 
-Verify installation:
+- Tags env renamed from `TAILSCALE_AUTH_TAGS` to `TAILSCALE_TAGS`.
+- Secret generation moved behind helpers for clarity:
+  - `tailscaleConfigData` for Secret `stringData`
+  - `tailscaleServicesConfig` for ConfigMap data
+- Aggregated resource reconciliation via `ReconcilerResources`.
 
-```bash
-kubectl get crd gateways.gateway.networking.k8s.io
-kubectl get crd httproutes.gateway.networking.k8s.io
-```
+## References
 
-### Option A: Kustomize
-
-```bash
-kubectl apply -k manifests/gateway/base
-
-# Create controller auth key Secret in tailscale-system
-kubectl -n tailscale-system create secret generic tailscale-gateway-controller \
-  --from-literal=authkey=tskey-xxxxxxxxxxxxxxxx
-```
-
-### Option B: Skaffold
-
-```bash
-# Requires ko and skaffold
-skaffold dev -p default
-```
-
-Or deploy the demo profile:
-
-```bash
-# Option B: Skaffold (demo profile)
-skaffold dev -p demo
-```
-
-The demo profile builds the controller image with ko and deploys
-`manifests/gateway/overlays/demo`.
-
-## Configuration
-
-Environment variables consumed by the controller:
-
-- `METRICS_BIND_ADDRESS` (default `:8080`)
-- `HEALTH_PROBE_BIND_ADDRESS` (default `:8081`)
-- `TS_IMAGE` (default `tailscale/tailscale:latest`)
-- `TS_AUTHKEY` (optional; controller reads and writes `authkey` in Secret)
-
-## Usage
-
-### Define Gateway and HTTPRoute
-
-```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: demo
-  namespace: tailscale-gateway-demo
-spec:
-  gatewayClassName: tailscale
-  listeners:
-    - name: http
-      protocol: HTTP
-      port: 80
-    - name: https
-      protocol: HTTPS
-      port: 443
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: demo
-  namespace: tailscale-gateway-demo
-spec:
-  parentRefs:
-    - name: demo
-  hostnames:
-    - demo
-  rules:
-    - backendRefs:
-        - name: demo
-          port: 80
-```
-
-Apply the demo app and routes:
-
-```bash
-kubectl apply -k manifests/demo
-```
-
-### What gets created
-
-- DaemonSet `<gateway>-tailscale-gateway` in the Gateway namespace
-- ConfigMap `<gateway>` containing `services.hujson`
-- Secret `<gateway>` in the Gateway namespace with key `authkey` (populated if `TS_AUTHKEY` is set)
-
-## Observability
-
-- Metrics: `:8080/metrics` (Service `tailscale-gateway-controller-metrics`)
-- Health/Ready: `:8081` HTTP probes
-- Logging: zap in dev mode
-
-## Troubleshooting
-
-```bash
-# Controller logs
-kubectl -n tailscale-system logs deploy/tailscale-gateway-controller
-
-# Gateway and Listener conditions
-kubectl -n <ns> get gateway <name> -o yaml
-
-# DaemonSet and pods
-kubectl -n <ns> get ds,pods -l app=tailscale-gateway
-
-# Configs
-kubectl -n <ns> get cm <name> -o yaml
-```
-
-## Development
-
-```bash
-# Build binary
-go build ./cmd/controller
-
-# Run tests
-go test ./...
-
-# Build and deploy with ko + skaffold
-skaffold dev -p default
-```
+- Tailscale client for API: https://github.com/tailscale/tailscale-client-go-v2
+- OAuth clients and scopes: https://tailscale.com/kb/1215/oauth-clients

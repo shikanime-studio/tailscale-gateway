@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
-	tailscaleconfig "github.com/shikanime-studio/tailscale-gateway/internal/tailscaleconfig"
+	tsconfig "github.com/shikanime-studio/tailscale-gateway/internal/tsconfig"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -324,16 +324,16 @@ func TestServicesApplyBuildsTargets(t *testing.T) {
 		},
 	}
 
-	var opts []tailscaleconfig.Option
+	var opts []tsconfig.Option
 	for i := range routes {
 		rt := routes[i]
-		opts = append(opts, tailscaleconfig.WithHTTPRoute(&rt))
+		opts = append(opts, tsconfig.WithHTTPRoute(&rt))
 	}
-	cfg, err := tailscaleconfig.NewConfig(gw, opts...)
+	cfg, err := tsconfig.NewConfig(gw, opts...)
 	if err != nil {
 		t.Fatalf("new config failed: %v", err)
 	}
-	outBytes, err := tailscaleconfig.Marshal(cfg)
+	outBytes, err := tsconfig.Marshal(cfg)
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
 	}
