@@ -275,12 +275,11 @@ func (r *GatewayReconciler) ReconcilerSecret(
 func (r *GatewayReconciler) tailscaleConfigData(
 	ctx context.Context,
 ) (map[string]string, error) {
-	tags := r.Cfg.GetTailscaleTags()
 	tsClient, err := tsclient.New(r.Cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize tailscale client: %w", err)
 	}
-	key, err := tsClient.CreateAuthKey(ctx, tags)
+	key, err := tsClient.CreateAuthKey(ctx, r.Cfg.GetTailscaleTags())
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate tailscale auth key: %w", err)
 	}
