@@ -131,6 +131,10 @@ func (r *GatewayReconciler) validateListeners(gateway *gatewayv1.Gateway) error 
 	return nil
 }
 
+func (r *GatewayReconciler) isManagedByController(gw *gatewayv1.Gateway) bool {
+	return gw.Spec.GatewayClassName == GatewayClassName
+}
+
 // isManagedByController reports whether the Gateway is managed by this controller
 // based on its GatewayClassName.
 func (r *GatewayReconciler) isManagedByController(gw *gatewayv1.Gateway) bool {
@@ -299,6 +303,33 @@ func (r *GatewayReconciler) ReconcilerSecret(
 	return nil
 }
 
+func (r *GatewayReconciler) tailscaleConfigData(
+	ctx context.Context,
+) (map[string]string, error) {
+	tags := r.Cfg.GetTailscaleTags()
+	tsClient, err := tsclient.New(r.Cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize tailscale client: %w", err)
+	}
+	key, err := tsClient.CreateAuthKey(ctx, tags)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate tailscale auth key: %w", err)
+	}
+	if key == "" {
+		return nil, fmt.Errorf("generated empty tailscale auth key")
+	}
+	return map[string]string{"authkey": key}, nil
+}
+
+func (r *GatewayReconciler) isAuthKeyGenerationNeeded(existing *corev1.Secret) bool {
+	if existing != nil && existing.Data != nil {
+		if v, ok := existing.Data["authkey"]; ok && len(v) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // tailscaleConfigData returns stringData for a Secret with a newly generated
 // Tailscale auth key using configured tags.
 func (r *GatewayReconciler) tailscaleConfigData(
@@ -360,6 +391,16 @@ func (r *GatewayReconciler) ReconcilerConfigMap(
 	}
 
 	return nil
+}
+
+func (r *GatewayReconciler) tailscaleServicesConfig(
+	cfg *tsconfig.Config,
+) (map[string]string, error) {
+	servicesConfig, err := tsconfig.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal services config: %w", err)
+	}
+	return map[string]string{"services.hujson": string(servicesConfig)}, nil
 }
 
 // tailscaleServicesConfig marshals services configuration to a file map suitable

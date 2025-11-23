@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale-gateway-controller
+  namespace: tailscale-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: controller
+          env:
+            - name: TAILSCALE_TAILNET
+              value: tail70d29d.ts.net
