@@ -82,7 +82,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Check if the Gateway is managed by this controller
-	if gateway.Spec.GatewayClassName != GatewayClassName {
+	if !r.isManagedByController(gateway) {
 		return ctrl.Result{}, nil
 	}
 
@@ -129,6 +129,10 @@ func (r *GatewayReconciler) validateListeners(gateway *gatewayv1.Gateway) error 
 	}
 
 	return nil
+}
+
+func (r *GatewayReconciler) isManagedByController(gw *gatewayv1.Gateway) bool {
+	return gw.Spec.GatewayClassName == GatewayClassName
 }
 
 func (r *GatewayReconciler) getHTTPRoutesForGateway(
@@ -247,13 +251,22 @@ func (r *GatewayReconciler) ReconcilerSecret(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) error {
+	existing, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
+	if err == nil {
+		if !r.isAuthKeyGenerationNeeded(existing) {
+			return nil
+		}
+	} else if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("failed to get existing secret: %w", err)
+	}
+
 	owner := applymetav1.OwnerReference().
 		WithAPIVersion("gateway.networking.k8s.io/v1").
 		WithKind("Gateway").
 		WithName(gw.Name).
 		WithUID(gw.UID)
 
-	stringData, err := r.tailscaleConfigData(ctx, gw)
+	stringData, err := r.tailscaleConfigData(ctx)
 	if err != nil {
 		return err
 	}
@@ -275,19 +288,7 @@ func (r *GatewayReconciler) ReconcilerSecret(
 
 func (r *GatewayReconciler) tailscaleConfigData(
 	ctx context.Context,
-	gw *gatewayv1.Gateway,
 ) (map[string]string, error) {
-	existing, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
-	if err == nil {
-		if existing.Data != nil {
-			if v, ok := existing.Data["authkey"]; ok && len(v) > 0 {
-				return nil, nil
-			}
-		}
-	} else if !apierrors.IsNotFound(err) {
-		return nil, fmt.Errorf("failed to get existing secret: %w", err)
-	}
-
 	tags := r.Cfg.GetTailscaleTags()
 	tsClient, err := tsclient.New(r.Cfg)
 	if err != nil {
@@ -301,6 +302,15 @@ func (r *GatewayReconciler) tailscaleConfigData(
 		return nil, fmt.Errorf("generated empty tailscale auth key")
 	}
 	return map[string]string{"authkey": key}, nil
+}
+
+func (r *GatewayReconciler) isAuthKeyGenerationNeeded(existing *corev1.Secret) bool {
+	if existing != nil && existing.Data != nil {
+		if v, ok := existing.Data["authkey"]; ok && len(v) > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *GatewayReconciler) ReconcilerConfigMap(
