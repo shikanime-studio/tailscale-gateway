@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	"github.com/shikanime-studio/tailscale-gateway/internal/tsclient"
@@ -632,7 +631,7 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 			gatewayv1.GatewayReasonPending,
 			fmt.Sprintf("Failed to apply DaemonSet: %v", err),
 		)
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, fmt.Errorf("failed to apply daemon set: %w", err)
+		return ctrl.Result{Requeue: true}, fmt.Errorf("failed to apply daemon set: %w", err)
 	}
 
 	if ds.Status.NumberReady != ds.Status.DesiredNumberScheduled {
