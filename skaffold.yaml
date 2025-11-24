@@ -14,12 +14,11 @@ build:
             - go.sum
         dir: ./cmd/tailscale-gateway-controller
         fromImage: cgr.dev/chainguard/glibc-dynamic
+manifests:
+  kustomize:
+    paths:
+      - manifests/gateway
 profiles:
-  - name: default
-    manifests:
-      kustomize:
-        paths:
-          - manifests/gateway
   - name: demo
     manifests:
       kustomize:
