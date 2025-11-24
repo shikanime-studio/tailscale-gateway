@@ -32,9 +32,6 @@ func New() (*Config, error) {
 	if err := v.BindEnv("ts_image", "TS_IMAGE"); err != nil {
 		return nil, err
 	}
-	if err := v.BindEnv("ts_auth_key", "TS_AUTHKEY", "ts_auth_key"); err != nil {
-		return nil, err
-	}
 	if err := v.BindEnv("ts_tags", "TAILSCALE_TAGS", "ts_tags"); err != nil {
 		return nil, err
 	}
@@ -61,10 +58,6 @@ func (c *Config) GetHealthProbeBindAddress() string {
 	return c.v.GetString("health_probe_bind_address")
 }
 
-// GetTailscaleAuthKey returns the optional Tailscale auth key.
-func (c *Config) GetTailscaleAuthKey() string {
-	return c.v.GetString("ts_auth_key")
-}
 
 // GetTailscaleImage returns the tailscale daemon container image.
 func (c *Config) GetTailscaleImage() string {
