@@ -38,11 +38,6 @@ const (
 	// GatewayClassName is the name of the GatewayClass this controller manages
 	GatewayClassName = "tailscale"
 
-	// ConditionReasonReady indicates that the Gateway is ready.
-	ConditionReasonReady = "Ready"
-	// ConditionReasonNotReady indicates that the Gateway is not ready.
-	ConditionReasonNotReady = "NotReady"
-
 	// FinalizerTailscale is the finalizer used to clean up Tailscale resources
 	FinalizerTailscale = "tailscale.net/finalizer"
 )
@@ -102,9 +97,6 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	if err := r.reconcileResources(ctx, gateway); err != nil {
 		log.Error(err, "Failed to manage proxy servers")
-		if err = r.updateGatewayStatus(ctx, gateway, ConditionReasonNotReady, err.Error()); err != nil {
-			log.Error(err, "Failed to update Gateway status")
-		}
 		return ctrl.Result{}, err
 	}
 
@@ -210,32 +202,100 @@ func (r *GatewayReconciler) reconcileResources(
 	if err != nil {
 		return err
 	}
+
 	cfg, err := tsconfig.NewConfig(
 		gw,
 		tsconfig.WithHTTPRoutes(hrs),
 	)
 	if err != nil {
-		if statusErr := r.updateGatewayStatus(ctx, gw, ConditionReasonNotReady, fmt.Sprintf("Failed to build Tailscale config: %v", err)); statusErr != nil {
-			return fmt.Errorf(
-				"failed to build tailscale config: %w; failed to update Gateway status: %w",
-				err,
-				statusErr,
-			)
-		}
+		r.setGatewayAcceptedCondition(
+			gw,
+			metav1.ConditionFalse,
+			gatewayv1.GatewayReasonInvalid,
+			fmt.Sprintf("Failed to build Tailscale config: %v", err),
+		)
 		return err
 	}
+
+	gw.Status.Listeners = nil
+
 	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return r.reconcileServiceAccount(gctx, gw) })
-	g.Go(func() error { return r.reconcileRBAC(gctx, gw) })
 	g.Go(func() error { return r.reconcileSecret(gctx, gw) })
 	g.Go(func() error { return r.reconcileConfigMap(gctx, gw, cfg) })
-	g.Go(func() error { return r.reconcileDaemonSet(gctx, gw, cfg) })
-	if err := g.Wait(); err != nil {
+	if err = g.Wait(); err != nil {
+		for _, listener := range gw.Spec.Listeners {
+			ls := gatewayv1.ListenerStatus{
+				Name:           listener.Name,
+				SupportedKinds: []gatewayv1.RouteGroupKind{{Kind: "HTTPRoute"}},
+				Conditions:     []metav1.Condition{},
+			}
+			r.setListenerAcceptedCondition(
+				&ls,
+				gw,
+				metav1.ConditionFalse,
+				gatewayv1.GatewayReasonInvalid,
+				fmt.Sprintf("Failed to reconcile resources: %v", err),
+			)
+			gw.Status.Listeners = append(gw.Status.Listeners, ls)
+		}
 		return fmt.Errorf("failed to reconcile resources: %w", err)
 	}
-	if err := r.updateGatewayStatus(ctx, gw, ConditionReasonReady, "Gateway is ready"); err != nil {
+	r.setGatewayAcceptedCondition(
+		gw,
+		metav1.ConditionTrue,
+		gatewayv1.GatewayReasonAccepted,
+		"Gateway accepted",
+	)
+	for _, listener := range gw.Spec.Listeners {
+		ls := gatewayv1.ListenerStatus{
+			Name:           listener.Name,
+			SupportedKinds: []gatewayv1.RouteGroupKind{{Kind: "HTTPRoute"}},
+			Conditions:     []metav1.Condition{},
+		}
+		r.setListenerAcceptedCondition(
+			&ls,
+			gw,
+			metav1.ConditionTrue,
+			gatewayv1.GatewayReasonAccepted,
+			"Listener accepted",
+		)
+		gw.Status.Listeners = append(gw.Status.Listeners, ls)
+	}
+
+	g, gctx = errgroup.WithContext(ctx)
+	g.Go(func() error { return r.reconcileServiceAccount(gctx, gw) })
+	g.Go(func() error { return r.reconcileRBAC(gctx, gw) })
+	g.Go(func() error { return r.reconcileDaemonSet(gctx, gw, cfg) })
+	if err = g.Wait(); err != nil {
+		return fmt.Errorf("failed to reconcile resources: %w", err)
+	}
+
+	ds, err := r.Kube.AppsV1().DaemonSets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
+	if err != nil {
+		msg := fmt.Sprintf("DaemonSet status unknown: %v", err)
+		r.setGatewayProgrammedCondition(
+			gw,
+			metav1.ConditionFalse,
+			gatewayv1.GatewayReasonPending,
+			msg,
+		)
+		r.updateListenerStatus(gw, metav1.ConditionFalse, gatewayv1.GatewayReasonPending, msg)
+	} else if ds.Status.NumberReady != ds.Status.DesiredNumberScheduled {
+		msg := fmt.Sprintf("DaemonSet not ready (%d/%d)", ds.Status.NumberReady, ds.Status.DesiredNumberScheduled)
+		r.setGatewayProgrammedCondition(gw, metav1.ConditionFalse, gatewayv1.GatewayReasonPending, msg)
+		r.updateListenerStatus(gw, metav1.ConditionFalse, gatewayv1.GatewayReasonPending, msg)
+	} else {
+		msg := "Gateway programmed"
+		r.setGatewayProgrammedCondition(gw, metav1.ConditionTrue, gatewayv1.GatewayReasonProgrammed, msg)
+		r.updateListenerStatus(gw, metav1.ConditionTrue, gatewayv1.GatewayReasonProgrammed, msg)
+	}
+
+	r.updateStatusAddresses(gw, hrs)
+
+	if _, err := r.Gateway.GatewayV1().Gateways(gw.Namespace).UpdateStatus(ctx, gw, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("failed to update Gateway status: %w", err)
 	}
+
 	return nil
 }
 
@@ -323,13 +383,12 @@ func (r *GatewayReconciler) reconcileSecret(
 
 	stringData, err := r.tailscaleConfigData(ctx)
 	if err != nil {
-		if statusErr := r.updateGatewayStatus(ctx, gw, ConditionReasonNotReady, fmt.Sprintf("Failed to create Tailscale auth key: %v", err)); statusErr != nil {
-			return fmt.Errorf(
-				"failed to create tailscale auth key: %w; failed to update Gateway status: %w",
-				err,
-				statusErr,
-			)
-		}
+		r.setGatewayProgrammedCondition(
+			gw,
+			metav1.ConditionFalse,
+			gatewayv1.GatewayReasonPending,
+			fmt.Sprintf("Failed to create Tailscale auth key: %v", err),
+		)
 		return err
 	}
 
@@ -342,13 +401,12 @@ func (r *GatewayReconciler) reconcileSecret(
 	if _, err := r.Kube.CoreV1().
 		Secrets(gw.Namespace).
 		Apply(ctx, apply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true}); err != nil {
-		if statusErr := r.updateGatewayStatus(ctx, gw, ConditionReasonNotReady, fmt.Sprintf("Failed to apply Secret: %v", err)); statusErr != nil {
-			return fmt.Errorf(
-				"failed to apply secret: %w; failed to update Gateway status: %w",
-				err,
-				statusErr,
-			)
-		}
+		r.setGatewayProgrammedCondition(
+			gw,
+			metav1.ConditionFalse,
+			gatewayv1.GatewayReasonPending,
+			fmt.Sprintf("Failed to apply Secret: %v", err),
+		)
 		return fmt.Errorf("failed to apply secret: %w", err)
 	}
 
@@ -394,13 +452,12 @@ func (r *GatewayReconciler) reconcileConfigMap(
 ) error {
 	data, err := r.tailscaleServicesConfig(cfg)
 	if err != nil {
-		if statusErr := r.updateGatewayStatus(ctx, gw, ConditionReasonNotReady, fmt.Sprintf("Failed to marshal Tailscale services config: %v", err)); statusErr != nil {
-			return fmt.Errorf(
-				"failed to marshal Tailscale services config: %w; failed to update Gateway status: %w",
-				err,
-				statusErr,
-			)
-		}
+		r.setGatewayProgrammedCondition(
+			gw,
+			metav1.ConditionFalse,
+			gatewayv1.GatewayReasonPending,
+			fmt.Sprintf("Failed to marshal Tailscale services config: %v", err),
+		)
 		return err
 	}
 
@@ -418,13 +475,12 @@ func (r *GatewayReconciler) reconcileConfigMap(
 	if _, err = r.Kube.CoreV1().
 		ConfigMaps(gw.Namespace).
 		Apply(ctx, apply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true}); err != nil {
-		if statusErr := r.updateGatewayStatus(ctx, gw, ConditionReasonNotReady, fmt.Sprintf("Failed to apply ConfigMap: %v", err)); statusErr != nil {
-			return fmt.Errorf(
-				"failed to apply config map: %w; failed to update Gateway status: %w",
-				err,
-				statusErr,
-			)
-		}
+		r.setGatewayProgrammedCondition(
+			gw,
+			metav1.ConditionFalse,
+			gatewayv1.GatewayReasonPending,
+			fmt.Sprintf("Failed to apply ConfigMap: %v", err),
+		)
 		return fmt.Errorf("failed to apply config map: %w", err)
 	}
 
@@ -454,46 +510,43 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 		DaemonSets(gw.Namespace).
 		Get(ctx, gw.Name, metav1.GetOptions{})
 	if err != nil {
-		if statusErr := r.updateGatewayStatus(ctx, gw, ConditionReasonNotReady, fmt.Sprintf("Failed to check DaemonSet status: %v", err)); statusErr != nil {
-			return fmt.Errorf(
-				"failed to check daemon set status: %w; failed to update Gateway status: %w",
-				err,
-				statusErr,
-			)
-		}
+		r.setGatewayProgrammedCondition(
+			gw,
+			metav1.ConditionFalse,
+			gatewayv1.GatewayReasonPending,
+			fmt.Sprintf("Failed to check DaemonSet status: %v", err),
+		)
 		return fmt.Errorf("failed to check daemon set status: %w", err)
 	}
 
 	if ds.Status.NumberReady != ds.Status.DesiredNumberScheduled {
-		if statusErr := r.updateGatewayStatus(ctx, gw, ConditionReasonNotReady, "DaemonSet not ready"); statusErr != nil {
-			return fmt.Errorf(
-				"daemon set not ready; failed to update Gateway status: %w",
-				statusErr,
-			)
-		}
+		r.setGatewayProgrammedCondition(
+			gw,
+			metav1.ConditionFalse,
+			gatewayv1.GatewayReasonPending,
+			"DaemonSet not ready",
+		)
 		return fmt.Errorf("daemon set not ready")
 	}
 
 	postStartCmd, err := tsconfig.AdvertiseServicesCommand(cfg)
 	if err != nil {
-		if statusErr := r.updateGatewayStatus(ctx, gw, ConditionReasonNotReady, fmt.Sprintf("Failed to build advertise command: %v", err)); statusErr != nil {
-			return fmt.Errorf(
-				"failed to build advertise command: %w; failed to update Gateway status: %w",
-				err,
-				statusErr,
-			)
-		}
+		r.setGatewayProgrammedCondition(
+			gw,
+			metav1.ConditionFalse,
+			gatewayv1.GatewayReasonPending,
+			fmt.Sprintf("Failed to build advertise command: %v", err),
+		)
 		return err
 	}
 	preStopCmd, err := tsconfig.DrainServicesCommand(cfg)
 	if err != nil {
-		if statusErr := r.updateGatewayStatus(ctx, gw, ConditionReasonNotReady, fmt.Sprintf("Failed to build drain command: %v", err)); statusErr != nil {
-			return fmt.Errorf(
-				"failed to build drain command: %w; failed to update Gateway status: %w",
-				err,
-				statusErr,
-			)
-		}
+		r.setGatewayProgrammedCondition(
+			gw,
+			metav1.ConditionFalse,
+			gatewayv1.GatewayReasonPending,
+			fmt.Sprintf("Failed to build drain command: %v", err),
+		)
 		return err
 	}
 
@@ -610,13 +663,12 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 		DaemonSets(gw.Namespace).
 		Apply(ctx, apply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
 	if err != nil {
-		if statusErr := r.updateGatewayStatus(ctx, gw, ConditionReasonNotReady, fmt.Sprintf("Failed to apply DaemonSet: %v", err)); statusErr != nil {
-			return fmt.Errorf(
-				"failed to apply daemon set: %w; failed to update Gateway status: %w",
-				err,
-				statusErr,
-			)
-		}
+		r.setGatewayProgrammedCondition(
+			gw,
+			metav1.ConditionFalse,
+			gatewayv1.GatewayReasonPending,
+			fmt.Sprintf("Failed to apply DaemonSet: %v", err),
+		)
 		return fmt.Errorf("failed to apply daemon set: %w", err)
 	}
 
@@ -634,95 +686,110 @@ func (r *GatewayReconciler) selectorLabels(gw *gatewayv1.Gateway) map[string]str
 	return selectorLabels
 }
 
-// updateGatewayStatus sets Gateway conditions, listener statuses, and addresses
-// based on readiness and the current reconciliation outcome.
-func (r *GatewayReconciler) updateGatewayStatus(
-	ctx context.Context,
+// setGatewayAcceptedCondition sets the Accepted condition for the Gateway.
+func (r *GatewayReconciler) setGatewayAcceptedCondition(
 	gw *gatewayv1.Gateway,
-	reason, message string,
-) error {
-	r.setGatewayAcceptedCondition(gw)
-	r.setGatewayProgrammedCondition(gw, reason, message)
-
-	for _, listener := range gw.Spec.Listeners {
-		listenerStatus := gatewayv1.ListenerStatus{
-			Name:           listener.Name,
-			SupportedKinds: []gatewayv1.RouteGroupKind{{Kind: "HTTPRoute"}},
-			Conditions:     []metav1.Condition{},
-		}
-		r.setListenerAcceptedCondition(&listenerStatus, gw)
-		r.setListenerProgrammedCondition(&listenerStatus, gw, reason, message)
-		gw.Status.Listeners = append(gw.Status.Listeners, listenerStatus)
-	}
-
-	gw.Status.Addresses = []gatewayv1.GatewayStatusAddress{
-		{
-			Type:  ptr.To(gatewayv1.AddressType("Hostname")),
-			Value: fmt.Sprintf("%s-%s", gw.Namespace, gw.Name),
-		},
-	}
-
-	if _, err := r.Gateway.GatewayV1().Gateways(gw.Namespace).UpdateStatus(ctx, gw, metav1.UpdateOptions{}); err != nil {
-		return fmt.Errorf("failed to update Gateway status: %w", err)
-	}
-
-	return nil
-}
-
-func (r *GatewayReconciler) setGatewayAcceptedCondition(gw *gatewayv1.Gateway) bool {
+	status metav1.ConditionStatus,
+	reason gatewayv1.GatewayConditionReason,
+	message string,
+) bool {
 	accepted := metav1.Condition{
 		Type:               string(gatewayv1.GatewayConditionAccepted),
-		Status:             metav1.ConditionTrue,
+		Status:             status,
 		ObservedGeneration: gw.Generation,
 		LastTransitionTime: metav1.Now(),
-		Reason:             string(gatewayv1.GatewayReasonAccepted),
-		Message:            "Gateway accepted",
+		Reason:             string(reason),
+		Message:            message,
 	}
 	return meta.SetStatusCondition(&gw.Status.Conditions, accepted)
 }
 
-func (r *GatewayReconciler) setGatewayProgrammedCondition(gw *gatewayv1.Gateway, reason, message string) bool {
+// setGatewayProgrammedCondition sets the Programmed condition for the Gateway.
+func (r *GatewayReconciler) setGatewayProgrammedCondition(
+	gw *gatewayv1.Gateway,
+	status metav1.ConditionStatus,
+	reason gatewayv1.GatewayConditionReason,
+	message string,
+) bool {
 	programmed := metav1.Condition{
 		Type:               string(gatewayv1.GatewayConditionProgrammed),
-		Status:             metav1.ConditionFalse,
+		Status:             status,
 		ObservedGeneration: gw.Generation,
 		LastTransitionTime: metav1.Now(),
-		Reason:             string(gatewayv1.GatewayReasonPending),
+		Reason:             string(reason),
 		Message:            message,
-	}
-	if reason == ConditionReasonReady {
-		programmed.Status = metav1.ConditionTrue
-		programmed.Reason = string(gatewayv1.GatewayReasonProgrammed)
-		programmed.Message = "Gateway programmed"
 	}
 	return meta.SetStatusCondition(&gw.Status.Conditions, programmed)
 }
 
-func (r *GatewayReconciler) setListenerAcceptedCondition(ls *gatewayv1.ListenerStatus, gw *gatewayv1.Gateway) bool {
+// setListenerAcceptedCondition sets the Accepted condition for the Listener.
+func (r *GatewayReconciler) setListenerAcceptedCondition(
+	ls *gatewayv1.ListenerStatus,
+	gw *gatewayv1.Gateway,
+	status metav1.ConditionStatus,
+	reason gatewayv1.GatewayConditionReason,
+	message string,
+) bool {
 	accepted := metav1.Condition{
 		Type:               string(gatewayv1.ListenerConditionAccepted),
-		Status:             metav1.ConditionTrue,
+		Status:             status,
 		ObservedGeneration: gw.Generation,
 		LastTransitionTime: metav1.Now(),
-		Reason:             "Accepted",
-		Message:            "Listener is accepted",
+		Reason:             string(reason),
+		Message:            message,
 	}
 	return meta.SetStatusCondition(&ls.Conditions, accepted)
 }
 
-func (r *GatewayReconciler) setListenerProgrammedCondition(ls *gatewayv1.ListenerStatus, gw *gatewayv1.Gateway, reason, message string) bool {
+// setListenerProgrammedCondition sets the Programmed condition for the Listener.
+func (r *GatewayReconciler) setListenerProgrammedCondition(
+	ls *gatewayv1.ListenerStatus,
+	gw *gatewayv1.Gateway,
+	status metav1.ConditionStatus,
+	reason gatewayv1.GatewayConditionReason,
+	message string,
+) bool {
 	programmed := metav1.Condition{
 		Type:               string(gatewayv1.ListenerConditionProgrammed),
-		Status:             metav1.ConditionTrue,
+		Status:             status,
 		ObservedGeneration: gw.Generation,
 		LastTransitionTime: metav1.Now(),
-		Reason:             "Programmed",
-		Message:            "Listener is programmed",
-	}
-	if reason != ConditionReasonReady {
-		programmed.Status = metav1.ConditionFalse
-		programmed.Reason = "Pending"
-		programmed.Message = message
+		Reason:             string(reason),
+		Message:            message,
 	}
 	return meta.SetStatusCondition(&ls.Conditions, programmed)
+}
+
+func (r *GatewayReconciler) updateStatusAddresses(
+	gw *gatewayv1.Gateway,
+	hrs []*gatewayv1.HTTPRoute,
+) {
+	hostSet := make(map[string]struct{})
+	for _, hr := range hrs {
+		if len(hr.Spec.Hostnames) > 0 {
+			for _, hn := range hr.Spec.Hostnames {
+				hostSet[string(hn)] = struct{}{}
+			}
+		}
+	}
+	gw.Status.Addresses = nil
+	for host := range hostSet {
+		gw.Status.Addresses = append(gw.Status.Addresses, gatewayv1.GatewayStatusAddress{
+			Type:  ptr.To(gatewayv1.AddressType("Hostname")),
+			Value: host,
+		})
+	}
+}
+
+func (r *GatewayReconciler) updateListenerStatus(
+	gw *gatewayv1.Gateway,
+	status metav1.ConditionStatus,
+	reason gatewayv1.GatewayConditionReason,
+	message string,
+) {
+	for _, listener := range gw.Spec.Listeners {
+		ls := gatewayv1.ListenerStatus{Name: listener.Name, SupportedKinds: []gatewayv1.RouteGroupKind{{Kind: "HTTPRoute"}}, Conditions: []metav1.Condition{}}
+		r.setListenerProgrammedCondition(&ls, gw, status, reason, message)
+		gw.Status.Listeners = append(gw.Status.Listeners, ls)
+	}
 }

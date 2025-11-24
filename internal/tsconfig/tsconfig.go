@@ -22,7 +22,7 @@ func (c *Config) Marshal() ([]byte, error) {
 }
 
 type options struct {
-    HTTPRoutes []*gatewayv1.HTTPRoute
+	HTTPRoutes []*gatewayv1.HTTPRoute
 }
 
 // Option modifies options used to build a Config.
@@ -46,28 +46,30 @@ func WithHTTPRoutes(hrs []*gatewayv1.HTTPRoute) Option {
 
 // NewConfig builds a Tailscale serve Config from a Gateway and HTTPRoutes.
 func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
-    o := makeOptions(opts)
+	o := makeOptions(opts)
 
-    cfg := &Config{cfg: &ipn.ServeConfig{Services: map[tailcfg.ServiceName]*ipn.ServiceConfig{}}}
-    for _, hr := range o.HTTPRoutes {
-        var serviceNames []tailcfg.ServiceName
-        if len(hr.Spec.Hostnames) == 0 {
-            serviceNames = []tailcfg.ServiceName{tailcfg.AsServiceName(fmt.Sprintf("svc:%s", gw.Name))}
-        } else {
-            for _, hn := range hr.Spec.Hostnames {
-                serviceNames = append(serviceNames, newServiceName(hn))
-            }
-        }
-        for _, svcName := range serviceNames {
-            if _, ok := cfg.cfg.Services[svcName]; !ok {
-                svc, err := newServiceConfig(gw, hr)
-                if err != nil {
-                    return nil, err
-                }
-                cfg.cfg.Services[svcName] = svc
-            }
-        }
-    }
+	cfg := &Config{cfg: &ipn.ServeConfig{Services: map[tailcfg.ServiceName]*ipn.ServiceConfig{}}}
+	for _, hr := range o.HTTPRoutes {
+		var serviceNames []tailcfg.ServiceName
+		if len(hr.Spec.Hostnames) == 0 {
+			serviceNames = []tailcfg.ServiceName{
+				tailcfg.AsServiceName(fmt.Sprintf("svc:%s", gw.Name)),
+			}
+		} else {
+			for _, hn := range hr.Spec.Hostnames {
+				serviceNames = append(serviceNames, newServiceName(hn))
+			}
+		}
+		for _, svcName := range serviceNames {
+			if _, ok := cfg.cfg.Services[svcName]; !ok {
+				svc, err := newServiceConfig(gw, hr)
+				if err != nil {
+					return nil, err
+				}
+				cfg.cfg.Services[svcName] = svc
+			}
+		}
+	}
 
 	return cfg, nil
 }
@@ -107,38 +109,38 @@ func newTCPPortHandlers(gw *gatewayv1.Gateway) map[uint16]*ipn.TCPPortHandler {
 
 // newWebServerConfigs builds web server configs for a Gateway and service options.
 func newWebServerConfigs(
-    gw *gatewayv1.Gateway,
-    hr *gatewayv1.HTTPRoute,
+	gw *gatewayv1.Gateway,
+	hr *gatewayv1.HTTPRoute,
 ) (map[ipn.HostPort]*ipn.WebServerConfig, error) {
-    web := map[ipn.HostPort]*ipn.WebServerConfig{}
+	web := map[ipn.HostPort]*ipn.WebServerConfig{}
 
 	for _, pr := range hr.Spec.ParentRefs {
 		if !isParentGateway(gw, &pr) {
 			continue
 		}
 
-        for _, l := range gw.Spec.Listeners {
-            if !isSupportedProtocol(l.Protocol) {
-                return nil, fmt.Errorf("only HTTP and HTTPS protocols are supported")
-            }
-            var hosts []string
-            if len(hr.Spec.Hostnames) == 0 {
-                hosts = []string{fmt.Sprintf("%s-%s", gw.Namespace, gw.Name)}
-            } else {
-                for _, h := range hr.Spec.Hostnames {
-                    hosts = append(hosts, string(h))
-                }
-            }
-            for _, host := range hosts {
-                addr := ipn.HostPort(fmt.Sprintf("%s:%d", host, l.Port))
-                handlers, err := newHTTPHandlers(hr)
-                if err != nil {
-                    return nil, err
-                }
-                web[addr] = &ipn.WebServerConfig{Handlers: handlers}
-            }
-        }
-    }
+		for _, l := range gw.Spec.Listeners {
+			if !isSupportedProtocol(l.Protocol) {
+				return nil, fmt.Errorf("only HTTP and HTTPS protocols are supported")
+			}
+			var hosts []string
+			if len(hr.Spec.Hostnames) == 0 {
+				hosts = []string{fmt.Sprintf("%s-%s", gw.Namespace, gw.Name)}
+			} else {
+				for _, h := range hr.Spec.Hostnames {
+					hosts = append(hosts, string(h))
+				}
+			}
+			for _, host := range hosts {
+				addr := ipn.HostPort(fmt.Sprintf("%s:%d", host, l.Port))
+				handlers, err := newHTTPHandlers(hr)
+				if err != nil {
+					return nil, err
+				}
+				web[addr] = &ipn.WebServerConfig{Handlers: handlers}
+			}
+		}
+	}
 
 	return web, nil
 }
@@ -164,25 +166,25 @@ func newHTTPHandlers(hr *gatewayv1.HTTPRoute) (map[string]*ipn.HTTPHandler, erro
 			return nil, fmt.Errorf("multiple BackendRefs in a single rule are not supported")
 		}
 
-        if len(rule.Matches) == 0 {
-            handler, err := newRootHandler(rule.BackendRefs[0], hr.Namespace)
-            if err != nil {
-                return nil, err
-            }
-            handlers["/"] = handler
-        } else {
-            for _, match := range rule.Matches {
-                if !isSupportedMatch(match) {
-                    // ignore non-prefix matches
-                    continue
-                }
-                handler, err := newMatchHandler(rule.BackendRefs[0], match, hr.Namespace)
-                if err != nil {
-                    return nil, err
-                }
-                handlers[*match.Path.Value] = handler
-            }
-        }
+		if len(rule.Matches) == 0 {
+			handler, err := newRootHandler(rule.BackendRefs[0], hr.Namespace)
+			if err != nil {
+				return nil, err
+			}
+			handlers["/"] = handler
+		} else {
+			for _, match := range rule.Matches {
+				if !isSupportedMatch(match) {
+					// ignore non-prefix matches
+					continue
+				}
+				handler, err := newMatchHandler(rule.BackendRefs[0], match, hr.Namespace)
+				if err != nil {
+					return nil, err
+				}
+				handlers[*match.Path.Value] = handler
+			}
+		}
 	}
 
 	return handlers, nil
@@ -190,29 +192,29 @@ func newHTTPHandlers(hr *gatewayv1.HTTPRoute) (map[string]*ipn.HTTPHandler, erro
 
 // isSupportedMatch returns true if the match is supported.
 func isSupportedMatch(match gatewayv1.HTTPRouteMatch) bool {
-    if match.Path == nil {
-        return false
-    }
-    if match.Path.Value == nil {
-        return false
-    }
-    // Default to PathMatchPathPrefix if type is nil
-    if match.Path.Type == nil {
-        return true
-    }
-    return *match.Path.Type == gatewayv1.PathMatchPathPrefix
+	if match.Path == nil {
+		return false
+	}
+	if match.Path.Value == nil {
+		return false
+	}
+	// Default to PathMatchPathPrefix if type is nil
+	if match.Path.Type == nil {
+		return true
+	}
+	return *match.Path.Type == gatewayv1.PathMatchPathPrefix
 }
 
 // newRootHandler builds an HTTP handler for a BackendRef and root path.
 func newRootHandler(br gatewayv1.HTTPBackendRef, routeNS string) (*ipn.HTTPHandler, error) {
-    return newHTTPHandler(br, "", routeNS)
+	return newHTTPHandler(br, "", routeNS)
 }
 
 // newMatchHandler builds an HTTP handler for a BackendRef and path match.
 func newMatchHandler(
-    br gatewayv1.HTTPBackendRef,
-    match gatewayv1.HTTPRouteMatch,
-    routeNS string,
+	br gatewayv1.HTTPBackendRef,
+	match gatewayv1.HTTPRouteMatch,
+	routeNS string,
 ) (*ipn.HTTPHandler, error) {
 	if match.Path == nil {
 		return nil, fmt.Errorf("path match is required")
@@ -220,25 +222,29 @@ func newMatchHandler(
 	if match.Path.Value == nil {
 		return nil, fmt.Errorf("path match value is required")
 	}
-    return newHTTPHandler(br, "", routeNS)
+	return newHTTPHandler(br, "", routeNS)
 }
 
 // newHTTPHandler builds an HTTP handler for a BackendRef and path.
-func newHTTPHandler(br gatewayv1.HTTPBackendRef, path string, routeNS string) (*ipn.HTTPHandler, error) {
-    upstream := url.URL{
-        Scheme: "http",
-        Path:   "",
-    }
-    upstream.Host = string(br.Name)
-    if br.Namespace != nil {
-        upstream.Host = fmt.Sprintf("%s.%s", upstream.Host, *br.Namespace)
-    } else if routeNS != "" {
-        upstream.Host = fmt.Sprintf("%s.%s", upstream.Host, routeNS)
-    }
-    if br.Port != nil {
-        upstream.Host = fmt.Sprintf("%s:%d", upstream.Host, *br.Port)
-    }
-    return &ipn.HTTPHandler{Proxy: upstream.String()}, nil
+func newHTTPHandler(
+	br gatewayv1.HTTPBackendRef,
+	path string,
+	routeNS string,
+) (*ipn.HTTPHandler, error) {
+	upstream := url.URL{
+		Scheme: "http",
+		Path:   "",
+	}
+	upstream.Host = string(br.Name)
+	if br.Namespace != nil {
+		upstream.Host = fmt.Sprintf("%s.%s", upstream.Host, *br.Namespace)
+	} else if routeNS != "" {
+		upstream.Host = fmt.Sprintf("%s.%s", upstream.Host, routeNS)
+	}
+	if br.Port != nil {
+		upstream.Host = fmt.Sprintf("%s:%d", upstream.Host, *br.Port)
+	}
+	return &ipn.HTTPHandler{Proxy: upstream.String()}, nil
 }
 
 // AdvertiseServicesCommand returns a shell command to advertise all services.
