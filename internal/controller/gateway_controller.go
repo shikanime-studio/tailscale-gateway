@@ -110,7 +110,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	if err := r.reconcileResources(ctx, gateway); err != nil {
 		log.Error(err, "Failed to manage proxy servers")
-		if err = r.UpdateGatewayStatus(ctx, gateway, false, ConditionReasonNotReady, err.Error()); err != nil {
+		if err = r.updateGatewayStatus(ctx, gateway, false, ConditionReasonNotReady, err.Error()); err != nil {
 			log.Error(err, "Failed to update Gateway status")
 		}
 		return ctrl.Result{}, err
@@ -131,7 +131,10 @@ func (r *GatewayReconciler) isManagedByController(gw *gatewayv1.Gateway) bool {
 }
 
 // addFinalizer adds the finalizer to the Gateway if it does not already have it.
-func (r *GatewayReconciler) updateGatewayFinalizer(ctx context.Context, gw *gatewayv1.Gateway) error {
+func (r *GatewayReconciler) updateGatewayFinalizer(
+	ctx context.Context,
+	gw *gatewayv1.Gateway,
+) error {
 	if !controllerutil.ContainsFinalizer(gw, FinalizerTailscale) {
 		controllerutil.AddFinalizer(gw, FinalizerTailscale)
 		if _, err := r.Gateway.GatewayV1().
@@ -231,7 +234,7 @@ func (r *GatewayReconciler) reconcileResources(
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	if err := r.UpdateGatewayStatus(ctx, gw, true, ConditionReasonReady, "Gateway is ready"); err != nil {
+	if err := r.updateGatewayStatus(ctx, gw, true, ConditionReasonReady, "Gateway is ready"); err != nil {
 		return err
 	}
 	return nil
@@ -559,9 +562,9 @@ func (r *GatewayReconciler) selectorLabels(gw *gatewayv1.Gateway) map[string]str
 	return selectorLabels
 }
 
-// UpdateGatewayStatus sets Gateway conditions, listener statuses, and addresses
+// updateGatewayStatus sets Gateway conditions, listener statuses, and addresses
 // based on readiness and the current reconciliation outcome.
-func (r *GatewayReconciler) UpdateGatewayStatus(
+func (r *GatewayReconciler) updateGatewayStatus(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 	ready bool,
