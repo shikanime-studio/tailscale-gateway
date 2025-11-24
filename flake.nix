@@ -50,12 +50,10 @@
               enable = true;
               settings = {
                 name = "Build";
-                on = {
-                  workflow_run = {
-                    workflows = [ "check" ];
-                    branches = [ "main" ];
-                    types = [ "completed" ];
-                  };
+                on.workflow_run = {
+                  workflows = [ "check" ];
+                  branches = [ "main" ];
+                  types = [ "completed" ];
                 };
                 jobs.build = with config.devenv.shells.default.github.lib; {
                   permissions.packages = "write";
