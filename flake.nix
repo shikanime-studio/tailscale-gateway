@@ -82,7 +82,6 @@
                     ];
                   };
                   build-manifests = with config.devenv.shells.default.github.lib; {
-                    permissions.packages = "write";
                     "runs-on" = "ubuntu-latest";
                     steps = with config.devenv.shells.default.github.actions; [
                       create-github-app-token
