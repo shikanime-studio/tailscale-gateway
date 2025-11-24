@@ -1,3 +1,5 @@
+// Package tsclient provides a thin wrapper around the Tailscale API client
+// for generating auth keys and managing devices.
 package tsclient
 
 import (
@@ -8,6 +10,8 @@ import (
 	"tailscale.com/client/tailscale/v2"
 )
 
+// TailscaleClient wraps the Tailscale API client and configuration to perform
+// auth key creation and device management operations.
 type TailscaleClient struct {
 	c   *tailscale.Client
 	cfg *config.Config

@@ -1,3 +1,4 @@
+// Package controller reconciles Gateway resources and manages Tailscale integration.
 package controller
 
 import (
