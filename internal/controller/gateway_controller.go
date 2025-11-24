@@ -288,6 +288,8 @@ func (r *GatewayReconciler) reconcileServiceAccount(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
 	owner := applymetav1.OwnerReference().
 		WithAPIVersion(gatewayv1.SchemeGroupVersion.String()).
 		WithKind("Gateway").
@@ -301,7 +303,8 @@ func (r *GatewayReconciler) reconcileServiceAccount(
 	if _, err := r.Kube.CoreV1().
 		ServiceAccounts(gw.Namespace).
 		Apply(ctx, apply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true}); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to apply service account: %w", err)
+		log.Error(err, "Failed to apply ServiceAccount")
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -313,6 +316,8 @@ func (r *GatewayReconciler) reconcileRBAC(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
 	res, err := r.reconcileServiceAccount(ctx, gw)
 	if err != nil {
 		return res, fmt.Errorf("failed to create service account: %w", err)
@@ -333,7 +338,8 @@ func (r *GatewayReconciler) reconcileRBAC(
 	if _, err := r.Kube.RbacV1().
 		ClusterRoleBindings().
 		Apply(ctx, apply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true}); err != nil {
-		return res, fmt.Errorf("failed to apply cluster role binding: %w", err)
+		log.Error(err, "Failed to apply ClusterRoleBinding")
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -351,6 +357,8 @@ func (r *GatewayReconciler) reconcileSecret(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
 	existing, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
 	if err == nil {
 		if !r.isAuthKeyGenerationNeeded(existing) {
@@ -392,7 +400,8 @@ func (r *GatewayReconciler) reconcileSecret(
 			gatewayv1.GatewayReasonPending,
 			fmt.Sprintf("Failed to apply Secret: %v", err),
 		)
-		return ctrl.Result{}, fmt.Errorf("failed to apply secret: %w", err)
+		log.Error(err, "Failed to apply Secret")
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -435,6 +444,8 @@ func (r *GatewayReconciler) reconcileConfigMap(
 	gw *gatewayv1.Gateway,
 	cfg *tsconfig.Config,
 ) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
 	data, err := r.tailscaleServicesConfig(cfg)
 	if err != nil {
 		r.setGatewayProgrammedCondition(
@@ -466,7 +477,8 @@ func (r *GatewayReconciler) reconcileConfigMap(
 			gatewayv1.GatewayReasonPending,
 			fmt.Sprintf("Failed to apply ConfigMap: %v", err),
 		)
-		return ctrl.Result{}, fmt.Errorf("failed to apply config map: %w", err)
+		log.Error(err, "Failed to apply ConfigMap")
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	return ctrl.Result{}, nil
