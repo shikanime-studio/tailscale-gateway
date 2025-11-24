@@ -221,8 +221,6 @@ func (r *GatewayReconciler) reconcileResources(
 		return ctrl.Result{}, fmt.Errorf("failed to build Tailscale config: %w", err)
 	}
 
-	gw.Status.Listeners = nil
-
 	g, gctx := errgroup.WithContext(ctx)
 	var secretRes ctrl.Result
 	g.Go(func() error {
@@ -658,6 +656,8 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 			gatewayv1.GatewayReasonPending,
 			msg,
 		)
+
+		gw.Status.Listeners = nil
 		for _, listener := range gw.Spec.Listeners {
 			ls := gatewayv1.ListenerStatus{
 				Name:           listener.Name,
@@ -685,6 +685,8 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 
 	msg := "Gateway programmed"
 	r.setGatewayProgrammedCondition(gw, metav1.ConditionTrue, gatewayv1.GatewayReasonProgrammed, msg)
+
+	gw.Status.Listeners = nil
 	for _, listener := range gw.Spec.Listeners {
 		ls := gatewayv1.ListenerStatus{
 			Name:           listener.Name,
