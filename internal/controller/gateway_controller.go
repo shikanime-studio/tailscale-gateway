@@ -820,6 +820,7 @@ func (r *GatewayReconciler) updateStatusAddresses(
 	}
 }
 
+// results returns the first result with a RequeueAfter value greater than 0.
 func (r *GatewayReconciler) results(
 	results ...ctrl.Result,
 ) ctrl.Result {
