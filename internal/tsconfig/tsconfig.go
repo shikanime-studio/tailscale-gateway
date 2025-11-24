@@ -167,7 +167,7 @@ func newHTTPHandlers(hr *gatewayv1.HTTPRoute) (map[string]*ipn.HTTPHandler, erro
 		}
 
 		if len(rule.Matches) == 0 {
-			handler, err := newRootHandler(rule.BackendRefs[0], hr.Namespace)
+			handler, err := newRootHandler(rule.BackendRefs[0])
 			if err != nil {
 				return nil, err
 			}
@@ -175,10 +175,9 @@ func newHTTPHandlers(hr *gatewayv1.HTTPRoute) (map[string]*ipn.HTTPHandler, erro
 		} else {
 			for _, match := range rule.Matches {
 				if !isSupportedMatch(match) {
-					// ignore non-prefix matches
-					continue
+					return nil, fmt.Errorf("only PathMatchPathPrefix is supported")
 				}
-				handler, err := newMatchHandler(rule.BackendRefs[0], match, hr.Namespace)
+				handler, err := newMatchHandler(rule.BackendRefs[0], match)
 				if err != nil {
 					return nil, err
 				}
@@ -197,10 +196,6 @@ func isSupportedMatch(match gatewayv1.HTTPRouteMatch) bool {
 	}
 	if match.Path.Value == nil {
 		return false
-	}
-	// Default to PathMatchPathPrefix if type is nil
-	if match.Path.Type == nil {
-		return true
 	}
 	return *match.Path.Type == gatewayv1.PathMatchPathPrefix
 }
