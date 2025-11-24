@@ -40,12 +40,54 @@
         treefmt-nix.flakeModule
       ];
       perSystem =
-        { pkgs, ... }:
+        { config, pkgs, ... }:
         {
           devenv.shells.default = {
             imports = [
               devlib.devenvModules.shikanime-studio
             ];
+            github.workflows.build = {
+              enable = true;
+              settings = {
+                name = "Build";
+                on = {
+                  workflow_run = {
+                    workflows = [ "check" ];
+                    branches = [ "main" ];
+                    types = [ "completed" ];
+                  };
+                };
+                jobs = {
+                  build = with config.devenv.shells.default.github.lib; {
+                    permissions.packages = "write";
+                    "runs-on" = "ubuntu-latest";
+                    steps = with config.devenv.shells.default.github.actions; [
+                      create-github-app-token
+                      checkout
+                      setup-nix-action
+                      {
+                        uses = "docker/login-action@v3";
+                        "with" = {
+                          registry = "ghcr.io";
+                          username = mkWorkflowRef "github.actor";
+                          password = mkWorkflowRef "secrets.GITHUB_TOKEN";
+                        };
+                      }
+                      {
+                        run = mkWorkflowRun [
+                          "nix"
+                          "shell"
+                          "nixpkgs#skaffold"
+                          "--"
+                          "build"
+                          "--platform" "linux/amd64,linux/arm64"
+                        ];
+                      }
+                    ];
+                  };
+                };
+              };
+            };
             languages.go.enable = true;
             packages = [
               pkgs.ko
