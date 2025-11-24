@@ -80,23 +80,25 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// examine DeletionTimestamp to determine if object is under deletion
+	var finalizerRes ctrl.Result
 	if gateway.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is not being deleted, so if it does not have our finalizer,
 		// then let's add the finalizer and update the object. This is equivalent
 		// to registering our finalizer.
-		if err = r.updateGatewayFinalizer(ctx, gateway); err != nil {
-			return ctrl.Result{}, err
+		finalizerRes, err = r.updateGatewayFinalizer(ctx, gateway)
+		if err != nil {
+			return finalizerRes, err
 		}
 	} else {
 		// The object is being deleted
-		if err = r.finalizeGateway(ctx, gateway); err != nil {
-			return ctrl.Result{}, err
+		finalizerRes, err = r.finalizeGateway(ctx, gateway)
+		if err != nil {
+			return finalizerRes, err
 		}
-		// Stop reconciliation as the item is being deleted
-		return ctrl.Result{}, nil
+		return finalizerRes, nil
 	}
 
-	res, err := r.reconcileResources(ctx, gateway)
+	resourcesRes, err := r.reconcileResources(ctx, gateway)
 	if err != nil {
 		log.Error(err, "Failed to manage proxy servers")
 		return ctrl.Result{}, err
@@ -107,7 +109,8 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		"hostname",
 		fmt.Sprintf("%s-%s", gateway.Namespace, gateway.Name),
 	)
-	return res, nil
+
+	return r.results(finalizerRes, resourcesRes), nil
 }
 
 // isManagedByController reports whether the Gateway is managed by this controller
@@ -120,38 +123,43 @@ func (r *GatewayReconciler) isManagedByController(gw *gatewayv1.Gateway) bool {
 func (r *GatewayReconciler) updateGatewayFinalizer(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
-) error {
+) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(gw, FinalizerTailscale) {
 		controllerutil.AddFinalizer(gw, FinalizerTailscale)
 		if _, err := r.Gateway.GatewayV1().
 			Gateways(gw.Namespace).
 			Update(ctx, gw, metav1.UpdateOptions{}); err != nil {
-			return err
+			return ctrl.Result{Requeue: true}, err
 		}
 	}
-	return nil
+	return ctrl.Result{}, nil
 }
 
 // finalizeGateway handles any external dependencies and removes the finalizer.
-func (r *GatewayReconciler) finalizeGateway(ctx context.Context, gw *gatewayv1.Gateway) error {
+func (r *GatewayReconciler) finalizeGateway(ctx context.Context, gw *gatewayv1.Gateway) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
 	// The object is being deleted
 	if controllerutil.ContainsFinalizer(gw, FinalizerTailscale) {
 		// our finalizer is present, so let's handle any external dependency
 
 		tsClient, err := tsclient.New(r.Cfg)
 		if err != nil {
-			return err
+			log.Error(err, "Failed to create Tailscale client")
+			return ctrl.Result{Requeue: true}, nil
 		}
 		sec, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
 		if err != nil {
-			return err
+			log.Error(err, "Failed to get Gateway secret")
+			return ctrl.Result{Requeue: true}, nil
 		}
 		if sec.Data != nil {
 			if b, ok := sec.Data["device_id"]; ok {
 				devID := string(b)
 				if devID != "" {
 					if err = tsClient.DeleteDevice(ctx, devID); err != nil {
-						return err
+						log.Error(err, "Failed to delete Tailscale device")
+						return ctrl.Result{Requeue: true}, nil
 					}
 				}
 			}
@@ -161,10 +169,11 @@ func (r *GatewayReconciler) finalizeGateway(ctx context.Context, gw *gatewayv1.G
 		if _, err := r.Gateway.GatewayV1().
 			Gateways(gw.Namespace).
 			Update(ctx, gw, metav1.UpdateOptions{}); err != nil {
-			return err
+			log.Error(err, "Failed to update Gateway")
+			return ctrl.Result{Requeue: true}, nil
 		}
 	}
-	return nil
+	return ctrl.Result{}, nil
 }
 
 // listHTTPRoutesForGateway returns all HTTPRoutes that reference the provided
@@ -813,26 +822,35 @@ func (r *GatewayReconciler) updateStatusAddresses(
 	gw *gatewayv1.Gateway,
 	hrs []*gatewayv1.HTTPRoute,
 ) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
 	sec, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
 	if err != nil {
+		log.Error(err, "Failed to get secret")
 		return ctrl.Result{Requeue: true}, nil
 	}
-	if sec.Data != nil {
+	if sec.Data == nil {
+		log.Info("Secret data is nil")
 		return ctrl.Result{Requeue: true}, nil
 	}
-	var tailnet string
-	if b, ok := sec.Data["device_fqdn"]; ok {
-		fqdn := strings.TrimSpace(string(b))
-		if fqdn != "" {
-			parts := strings.Split(fqdn, ".")
-			if len(parts) > 1 {
-				tailnet = strings.Join(parts[1:], ".")
-			}
+	fqdn, ok := sec.Data["device_fqdn"]
+	if !ok {
+		log.Info("device_fqdn is not in secret data")
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	tailnet := strings.TrimSpace(string(fqdn))
+	if tailnet != "" {
+		parts := strings.Split(tailnet, ".")
+		if len(parts) > 1 {
+			tailnet = strings.Join(parts[1:], ".")
 		}
 	}
 	if tailnet == "" {
+		log.Info("Tailnet is empty")
 		return ctrl.Result{Requeue: true}, nil
 	}
+
 	gw.Status.Addresses = nil
 	for _, hr := range hrs {
 		for _, hostname := range hr.Spec.Hostnames {
@@ -842,6 +860,7 @@ func (r *GatewayReconciler) updateStatusAddresses(
 			})
 		}
 	}
+
 	return ctrl.Result{}, nil
 }
 
