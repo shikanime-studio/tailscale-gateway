@@ -813,21 +813,25 @@ func (r *GatewayReconciler) updateStatusAddresses(
 	gw *gatewayv1.Gateway,
 	hrs []*gatewayv1.HTTPRoute,
 ) (ctrl.Result, error) {
-	var tailnet string
 	sec, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
-	if err == nil {
+	if err != nil {
 		return ctrl.Result{Requeue: true}, nil
 	}
 	if sec.Data != nil {
-		if b, ok := sec.Data["device_fqdn"]; ok {
-			fqdn := strings.TrimSpace(string(b))
-			if fqdn != "" {
-				parts := strings.Split(fqdn, ".")
-				if len(parts) > 1 {
-					tailnet = strings.Join(parts[1:], ".")
-				}
+		return ctrl.Result{Requeue: true}, nil
+	}
+	var tailnet string
+	if b, ok := sec.Data["device_fqdn"]; ok {
+		fqdn := strings.TrimSpace(string(b))
+		if fqdn != "" {
+			parts := strings.Split(fqdn, ".")
+			if len(parts) > 1 {
+				tailnet = strings.Join(parts[1:], ".")
 			}
 		}
+	}
+	if tailnet == "" {
+		return ctrl.Result{Requeue: true}, nil
 	}
 	gw.Status.Addresses = nil
 	for _, hr := range hrs {
