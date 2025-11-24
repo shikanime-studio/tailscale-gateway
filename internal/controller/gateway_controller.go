@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	"github.com/shikanime-studio/tailscale-gateway/internal/tsclient"
@@ -262,11 +263,14 @@ func (r *GatewayReconciler) reconcileResources(
 		}
 		return nil
 	})
-	if err := g.Wait(); err != nil {
+	if err = g.Wait(); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile resources: %w", err)
 	}
 
-	r.updateStatusAddresses(gw, hrs)
+	addrRes, err := r.updateStatusAddresses(ctx, gw, hrs)
+	if err != nil {
+		return ctrl.Result{Requeue: true}, nil
+	}
 
 	if _, err := r.Gateway.GatewayV1().Gateways(gw.Namespace).UpdateStatus(ctx, gw, metav1.UpdateOptions{}); err != nil {
 		return ctrl.Result{Requeue: true}, nil
@@ -278,7 +282,7 @@ func (r *GatewayReconciler) reconcileResources(
 		fmt.Sprintf("%s-%s", gw.Namespace, gw.Name),
 	)
 
-	return r.results(secretRes, configMapRes, saRes, rbacRes, dsRes), nil
+	return r.results(secretRes, configMapRes, saRes, rbacRes, dsRes, addrRes), nil
 }
 
 // reconcileServiceAccount applies the ServiceAccount owned by the Gateway.
@@ -805,24 +809,36 @@ func (r *GatewayReconciler) setListenerProgrammedCondition(
 
 // updateStatusAddresses updates the Addresses status field of the Gateway.
 func (r *GatewayReconciler) updateStatusAddresses(
+	ctx context.Context,
 	gw *gatewayv1.Gateway,
 	hrs []*gatewayv1.HTTPRoute,
-) {
-	hostSet := make(map[string]struct{})
-	for _, hr := range hrs {
-		if len(hr.Spec.Hostnames) > 0 {
-			for _, hn := range hr.Spec.Hostnames {
-				hostSet[string(hn)] = struct{}{}
+) (ctrl.Result, error) {
+	var tailnet string
+	sec, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
+	if err == nil {
+		return ctrl.Result{Requeue: true}, nil
+	}
+	if sec.Data != nil {
+		if b, ok := sec.Data["device_fqdn"]; ok {
+			fqdn := strings.TrimSpace(string(b))
+			if fqdn != "" {
+				parts := strings.Split(fqdn, ".")
+				if len(parts) > 1 {
+					tailnet = strings.Join(parts[1:], ".")
+				}
 			}
 		}
 	}
 	gw.Status.Addresses = nil
-	for host := range hostSet {
-		gw.Status.Addresses = append(gw.Status.Addresses, gatewayv1.GatewayStatusAddress{
-			Type:  ptr.To(gatewayv1.AddressType("Hostname")),
-			Value: host,
-		})
+	for _, hr := range hrs {
+		for _, hostname := range hr.Spec.Hostnames {
+			gw.Status.Addresses = append(gw.Status.Addresses, gatewayv1.GatewayStatusAddress{
+				Type:  ptr.To(gatewayv1.AddressType("Hostname")),
+				Value: fmt.Sprintf("%s.%s", hostname, tailnet),
+			})
+		}
 	}
+	return ctrl.Result{}, nil
 }
 
 // results returns the first result with a Requeue or RequeueAfter value greater than 0.
