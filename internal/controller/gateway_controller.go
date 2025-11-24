@@ -83,19 +83,20 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// The object is not being deleted, so if it does not have our finalizer,
 		// then let's add the finalizer and update the object. This is equivalent
 		// to registering our finalizer.
-		if err := r.updateGatewayFinalizer(ctx, gateway); err != nil {
+		if err = r.updateGatewayFinalizer(ctx, gateway); err != nil {
 			return ctrl.Result{}, err
 		}
 	} else {
 		// The object is being deleted
-		if err := r.finalizeGateway(ctx, gateway); err != nil {
+		if err = r.finalizeGateway(ctx, gateway); err != nil {
 			return ctrl.Result{}, err
 		}
 		// Stop reconciliation as the item is being deleted
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.reconcileResources(ctx, gateway); err != nil {
+	res, err := r.reconcileResources(ctx, gateway)
+	if err != nil {
 		log.Error(err, "Failed to manage proxy servers")
 		return ctrl.Result{}, err
 	}
@@ -105,7 +106,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		"hostname",
 		fmt.Sprintf("%s-%s", gateway.Namespace, gateway.Name),
 	)
-	return ctrl.Result{}, nil
+	return res, nil
 }
 
 // isManagedByController reports whether the Gateway is managed by this controller
@@ -197,10 +198,10 @@ func (r *GatewayReconciler) listHTTPRoutesForGateway(
 func (r *GatewayReconciler) reconcileResources(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
-) error {
+) (ctrl.Result, error) {
 	hrs, err := r.listHTTPRoutesForGateway(ctx, gw)
 	if err != nil {
-		return err
+		return ctrl.Result{}, err
 	}
 
 	cfg, err := tsconfig.NewConfig(
@@ -214,40 +215,40 @@ func (r *GatewayReconciler) reconcileResources(
 			gatewayv1.GatewayReasonInvalid,
 			fmt.Sprintf("Failed to build Tailscale config: %v", err),
 		)
-		return fmt.Errorf("failed to build Tailscale config: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to build Tailscale config: %w", err)
 	}
 
 	gw.Status.Listeners = nil
 
 	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return r.reconcileSecret(gctx, gw) })
-	g.Go(func() error { return r.reconcileConfigMap(gctx, gw, cfg) })
+	g.Go(func() error { _, err = r.reconcileSecret(gctx, gw); return err })
+	g.Go(func() error { _, err = r.reconcileConfigMap(gctx, gw, cfg); return err })
 	if err = g.Wait(); err != nil {
-		return fmt.Errorf("failed to reconcile resources: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile resources: %w", err)
 	}
 
 	g, gctx = errgroup.WithContext(ctx)
-	g.Go(func() error { return r.reconcileServiceAccount(gctx, gw) })
-	g.Go(func() error { return r.reconcileRBAC(gctx, gw) })
-	g.Go(func() error { return r.reconcileDaemonSet(gctx, gw, cfg) })
+	g.Go(func() error { _, err = r.reconcileServiceAccount(gctx, gw); return err })
+	g.Go(func() error { _, err = r.reconcileRBAC(gctx, gw); return err })
+	g.Go(func() error { _, err = r.reconcileDaemonSet(gctx, gw, cfg); return err })
 	if err = g.Wait(); err != nil {
-		return fmt.Errorf("failed to reconcile resources: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile resources: %w", err)
 	}
 
 	r.updateStatusAddresses(gw, hrs)
 
 	if _, err := r.Gateway.GatewayV1().Gateways(gw.Namespace).UpdateStatus(ctx, gw, metav1.UpdateOptions{}); err != nil {
-		return fmt.Errorf("failed to update Gateway status: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to update Gateway status: %w", err)
 	}
 
-	return nil
+	return ctrl.Result{}, nil
 }
 
 // reconcileServiceAccount applies the ServiceAccount owned by the Gateway.
 func (r *GatewayReconciler) reconcileServiceAccount(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
-) error {
+) (ctrl.Result, error) {
 	owner := applymetav1.OwnerReference().
 		WithAPIVersion(gatewayv1.SchemeGroupVersion.String()).
 		WithKind("Gateway").
@@ -261,10 +262,10 @@ func (r *GatewayReconciler) reconcileServiceAccount(
 	if _, err := r.Kube.CoreV1().
 		ServiceAccounts(gw.Namespace).
 		Apply(ctx, apply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true}); err != nil {
-		return fmt.Errorf("failed to apply service account: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to apply service account: %w", err)
 	}
 
-	return nil
+	return ctrl.Result{}, nil
 }
 
 // reconcileRBAC applies the ClusterRoleBinding to grant the Gateway's
@@ -272,9 +273,10 @@ func (r *GatewayReconciler) reconcileServiceAccount(
 func (r *GatewayReconciler) reconcileRBAC(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
-) error {
-	if err := r.reconcileServiceAccount(ctx, gw); err != nil {
-		return fmt.Errorf("failed to create service account: %w", err)
+) (ctrl.Result, error) {
+	res, err := r.reconcileServiceAccount(ctx, gw)
+	if err != nil {
+		return res, fmt.Errorf("failed to create service account: %w", err)
 	}
 
 	owner := applymetav1.OwnerReference().
@@ -292,10 +294,10 @@ func (r *GatewayReconciler) reconcileRBAC(
 	if _, err := r.Kube.RbacV1().
 		ClusterRoleBindings().
 		Apply(ctx, apply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true}); err != nil {
-		return fmt.Errorf("failed to apply cluster role binding: %w", err)
+		return res, fmt.Errorf("failed to apply cluster role binding: %w", err)
 	}
 
-	return nil
+	return ctrl.Result{}, nil
 }
 
 // clusterRoleBindingName returns the name used for the ClusterRoleBinding
@@ -309,14 +311,14 @@ func (r *GatewayReconciler) clusterRoleBindingName(gw *gatewayv1.Gateway) string
 func (r *GatewayReconciler) reconcileSecret(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
-) error {
+) (ctrl.Result, error) {
 	existing, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
 	if err == nil {
 		if !r.isAuthKeyGenerationNeeded(existing) {
-			return nil
+			return ctrl.Result{}, nil
 		}
 	} else if !apierrors.IsNotFound(err) {
-		return fmt.Errorf("failed to get existing secret: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to get existing secret: %w", err)
 	}
 
 	owner := applymetav1.OwnerReference().
@@ -333,7 +335,7 @@ func (r *GatewayReconciler) reconcileSecret(
 			gatewayv1.GatewayReasonPending,
 			fmt.Sprintf("Failed to create Tailscale auth key: %v", err),
 		)
-		return err
+		return ctrl.Result{}, err
 	}
 
 	apply := applycorev1.Secret(gw.Name, gw.Namespace).
@@ -351,10 +353,10 @@ func (r *GatewayReconciler) reconcileSecret(
 			gatewayv1.GatewayReasonPending,
 			fmt.Sprintf("Failed to apply Secret: %v", err),
 		)
-		return fmt.Errorf("failed to apply secret: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to apply secret: %w", err)
 	}
 
-	return nil
+	return ctrl.Result{}, nil
 }
 
 // tailscaleConfigData returns stringData for a Secret with a newly generated
@@ -393,7 +395,7 @@ func (r *GatewayReconciler) reconcileConfigMap(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 	cfg *tsconfig.Config,
-) error {
+) (ctrl.Result, error) {
 	data, err := r.tailscaleServicesConfig(cfg)
 	if err != nil {
 		r.setGatewayProgrammedCondition(
@@ -402,7 +404,7 @@ func (r *GatewayReconciler) reconcileConfigMap(
 			gatewayv1.GatewayReasonPending,
 			fmt.Sprintf("Failed to marshal Tailscale services config: %v", err),
 		)
-		return err
+		return ctrl.Result{}, err
 	}
 
 	owner := applymetav1.OwnerReference().
@@ -425,10 +427,10 @@ func (r *GatewayReconciler) reconcileConfigMap(
 			gatewayv1.GatewayReasonPending,
 			fmt.Sprintf("Failed to apply ConfigMap: %v", err),
 		)
-		return fmt.Errorf("failed to apply config map: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to apply config map: %w", err)
 	}
 
-	return nil
+	return ctrl.Result{}, nil
 }
 
 // tailscaleServicesConfig marshals services configuration to a file map suitable
@@ -449,7 +451,7 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 	cfg *tsconfig.Config,
-) error {
+) (ctrl.Result, error) {
 	postStartCmd, err := tsconfig.AdvertiseServicesCommand(cfg)
 	if err != nil {
 		r.setGatewayProgrammedCondition(
@@ -458,7 +460,7 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 			gatewayv1.GatewayReasonPending,
 			fmt.Sprintf("Failed to build advertise command: %v", err),
 		)
-		return err
+		return ctrl.Result{}, err
 	}
 	preStopCmd, err := tsconfig.DrainServicesCommand(cfg)
 	if err != nil {
@@ -468,7 +470,7 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 			gatewayv1.GatewayReasonPending,
 			fmt.Sprintf("Failed to build drain command: %v", err),
 		)
-		return err
+		return ctrl.Result{}, err
 	}
 
 	selectorLabels := r.selectorLabels(gw)
@@ -590,7 +592,7 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 			gatewayv1.GatewayReasonPending,
 			fmt.Sprintf("Failed to apply DaemonSet: %v", err),
 		)
-		return fmt.Errorf("failed to apply daemon set: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to apply daemon set: %w", err)
 	}
 
 	if ds.Status.NumberReady != ds.Status.DesiredNumberScheduled {
@@ -654,7 +656,7 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 		}
 	}
 
-	return nil
+	return ctrl.Result{}, nil
 }
 
 // selectorLabels returns labels used to select and identify Gateway pods.
