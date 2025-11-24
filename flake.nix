@@ -46,57 +46,64 @@
             imports = [
               devlib.devenvModules.shikanime-studio
             ];
-            github.workflows.build = {
-              enable = true;
-              settings = {
-                name = "Build";
-                on.workflow_run = {
-                  workflows = [ "check" ];
-                  branches = [ "main" ];
-                  types = [ "completed" ];
-                };
-                jobs.build = with config.devenv.shells.default.github.lib; {
-                  permissions.packages = "write";
-                  "runs-on" = "ubuntu-latest";
-                  steps = with config.devenv.shells.default.github.actions; [
-                    create-github-app-token
-                    checkout
-                    setup-nix
-                    docker-login
-                    {
-                      run = mkWorkflowRun [
-                        "nix"
-                        "shell"
-                        "nixpkgs#ko"
-                        "nixpkgs#skaffold"
-                        "--command"
-                        "skaffold"
-                        "build"
-                        "--platform"
-                        "linux/amd64,linux/arm64"
-                      ];
-                    }
-                    {
-                      run = mkWorkflowRun [
-                        "nix"
-                        "shell"
-                        "nixpkgs#ko"
-                        "nixpkgs#skaffold"
-                        "--command"
-                        "skaffold"
-                        "render"
-                        "--output"
-                        "manifests.yaml"
-                      ];
-                    }
-                    {
-                      uses = "actions/upload-artifact@v4";
-                      "with" = {
-                        name = "manifests";
-                        path = "manifests.yaml";
-                      };
-                    }
+            github = {
+              actions = with config.devenv.shells.default.github.lib; {
+                skaffold-build = {
+                  run = mkWorkflowRun [
+                    "nix"
+                    "shell"
+                    "nixpkgs#ko"
+                    "nixpkgs#skaffold"
+                    "--command"
+                    "skaffold"
+                    "build"
+                    "--platform"
+                    "linux/amd64,linux/arm64"
                   ];
+                };
+                skaffold-render = {
+                  run = mkWorkflowRun [
+                    "nix"
+                    "shell"
+                    "nixpkgs#ko"
+                    "nixpkgs#skaffold"
+                    "--command"
+                    "skaffold"
+                    "render"
+                    "--output"
+                    "manifests.yaml"
+                  ];
+                };
+                upload-artifacts = {
+                  uses = "actions/upload-artifact@v4";
+                  "with" = {
+                    name = "manifests";
+                    path = "manifests.yaml";
+                  };
+                };
+              };
+              workflows.build = {
+                enable = true;
+                settings = {
+                  name = "Build";
+                  on.workflow_run = {
+                    workflows = [ "check" ];
+                    branches = [ "main" ];
+                    types = [ "completed" ];
+                  };
+                  jobs.build = {
+                    permissions.packages = "write";
+                    "runs-on" = "ubuntu-latest";
+                    steps = with config.devenv.shells.default.github.actions; [
+                      create-github-app-token
+                      checkout
+                      setup-nix
+                      docker-login
+                      skaffold-build
+                      skaffold-render
+                      upload-artifacts
+                    ];
+                  };
                 };
               };
             };
