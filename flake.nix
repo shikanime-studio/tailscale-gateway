@@ -64,7 +64,7 @@
                     steps = with config.devenv.shells.default.github.actions; [
                       create-github-app-token
                       checkout
-                      setup-nix-action
+                      setup-nix
                       {
                         uses = "docker/login-action@v3";
                         "with" = {
