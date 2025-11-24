@@ -13,18 +13,13 @@ type Config struct {
 	Sites []Site
 }
 
+// Marshal serializes the Config to a Caddyfile by calling Marshal.
+func (c *Config) Marshal() ([]byte, error) { return Marshal(c) }
+
 // Site represents a single Caddy virtual host and its upstream backends.
 type Site struct {
 	Address   string
 	Upstreams []string
-}
-
-// Marshal serializes the Config to a Caddyfile by calling Marshal.
-func (c *Config) Marshal() ([]byte, error) { return Marshal(c) }
-
-// ConfigMapName returns the name of the ConfigMap that stores the Caddyfile.
-func ConfigMapName(gw *gatewayv1.Gateway) string {
-	return fmt.Sprintf("%s-caddy", gw.Name)
 }
 
 type options struct {
@@ -61,10 +56,6 @@ func WithHost(name string) Option {
 // NewConfig builds a Caddyfile model from Gateway + HTTPRoutes.
 func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 	o := makeOptions(opts)
-
-	if gw == nil {
-		return nil, fmt.Errorf("gateway is nil")
-	}
 
 	sites := map[string]map[string]struct{}{}
 	for _, l := range gw.Spec.Listeners {
