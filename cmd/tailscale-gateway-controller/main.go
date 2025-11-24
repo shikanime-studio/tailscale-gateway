@@ -4,13 +4,14 @@ package main
 import (
 	"os"
 
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	"github.com/shikanime-studio/tailscale-gateway/internal/controller"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -68,9 +69,7 @@ func main() {
 	}
 
 	reconciler := controller.NewGatewayReconciler(kubeClient, gwClient, mgr.GetScheme(), cfg)
-	if err = ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1.Gateway{}).
-		Complete(reconciler); err != nil {
+	if err = reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Gateway")
 		os.Exit(1)
 	}

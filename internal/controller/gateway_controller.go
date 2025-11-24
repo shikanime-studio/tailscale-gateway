@@ -60,6 +60,13 @@ func NewGatewayReconciler(
 	}
 }
 
+// SetupWithManager sets up the controller with the Manager.
+func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&gatewayv1.Gateway{}).
+		Complete(r)
+}
+
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
