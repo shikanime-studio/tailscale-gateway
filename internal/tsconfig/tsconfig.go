@@ -50,17 +50,8 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 
 	cfg := &Config{cfg: &ipn.ServeConfig{Services: map[tailcfg.ServiceName]*ipn.ServiceConfig{}}}
 	for _, hr := range o.HTTPRoutes {
-		var serviceNames []tailcfg.ServiceName
-		if len(hr.Spec.Hostnames) == 0 {
-			serviceNames = []tailcfg.ServiceName{
-				tailcfg.AsServiceName(fmt.Sprintf("svc:%s", gw.Name)),
-			}
-		} else {
-			for _, hn := range hr.Spec.Hostnames {
-				serviceNames = append(serviceNames, newServiceName(hn))
-			}
-		}
-		for _, svcName := range serviceNames {
+		for _, svcName := range hr.Spec.Hostnames {
+			svcName := newServiceName(svcName)
 			if _, ok := cfg.cfg.Services[svcName]; !ok {
 				svc, err := newServiceConfig(gw, hr)
 				if err != nil {
@@ -123,16 +114,11 @@ func newWebServerConfigs(
 			if !isSupportedProtocol(l.Protocol) {
 				return nil, fmt.Errorf("only HTTP and HTTPS protocols are supported")
 			}
-			var hosts []string
 			if len(hr.Spec.Hostnames) == 0 {
-				hosts = []string{fmt.Sprintf("%s-%s", gw.Namespace, gw.Name)}
-			} else {
-				for _, h := range hr.Spec.Hostnames {
-					hosts = append(hosts, string(h))
-				}
+				return nil, fmt.Errorf("at least one hostname is required")
 			}
-			for _, host := range hosts {
-				addr := ipn.HostPort(fmt.Sprintf("%s:%d", host, l.Port))
+			for _, h := range hr.Spec.Hostnames {
+				addr := ipn.HostPort(fmt.Sprintf("%s:%d", h, l.Port))
 				handlers, err := newHTTPHandlers(hr)
 				if err != nil {
 					return nil, err
@@ -220,10 +206,7 @@ func newMatchHandler(
 }
 
 // newHTTPHandler builds an HTTP handler for a BackendRef and path.
-func newHTTPHandler(
-	br gatewayv1.HTTPBackendRef,
-	path string,
-) (*ipn.HTTPHandler, error) {
+func newHTTPHandler(br gatewayv1.HTTPBackendRef, path string) (*ipn.HTTPHandler, error) {
 	upstream := url.URL{
 		Scheme: "http",
 		Path:   path,
