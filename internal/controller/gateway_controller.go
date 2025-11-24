@@ -788,7 +788,11 @@ func (r *GatewayReconciler) updateListenerStatus(
 	message string,
 ) {
 	for _, listener := range gw.Spec.Listeners {
-		ls := gatewayv1.ListenerStatus{Name: listener.Name, SupportedKinds: []gatewayv1.RouteGroupKind{{Kind: "HTTPRoute"}}, Conditions: []metav1.Condition{}}
+		ls := gatewayv1.ListenerStatus{
+			Name:           listener.Name,
+			SupportedKinds: []gatewayv1.RouteGroupKind{{Kind: "HTTPRoute"}},
+			Conditions:     []metav1.Condition{},
+		}
 		r.setListenerProgrammedCondition(&ls, gw, status, reason, message)
 		gw.Status.Listeners = append(gw.Status.Listeners, ls)
 	}
