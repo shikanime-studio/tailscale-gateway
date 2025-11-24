@@ -19,10 +19,9 @@ profiles:
     manifests:
       kustomize:
         paths:
-          - manifests/gateway/base
+          - manifests/gateway
   - name: demo
     manifests:
       kustomize:
         paths:
           - manifests/demo
-          - manifests/gateway
