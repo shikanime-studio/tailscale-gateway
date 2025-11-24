@@ -109,8 +109,3 @@ func (c *Config) GetTailscaleOAuthClientSecret() string {
 func (c *Config) GetTailscaleKeyDescription() string {
 	return c.v.GetString("ts_key_description")
 }
-
-// GetTailscaleTailnet returns the tailnet name used for address suffixes.
-func (c *Config) GetTailscaleTailnet() string {
-	return c.v.GetString("ts_tailnet")
-}
