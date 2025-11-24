@@ -80,22 +80,22 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// examine DeletionTimestamp to determine if object is under deletion
-	var finalizerRes ctrl.Result
-	if gateway.ObjectMeta.DeletionTimestamp.IsZero() {
-		// The object is not being deleted, so if it does not have our finalizer,
-		// then let's add the finalizer and update the object. This is equivalent
-		// to registering our finalizer.
-		finalizerRes, err = r.updateGatewayFinalizer(ctx, gateway)
-		if err != nil {
-			return finalizerRes, err
-		}
-	} else {
+	if !gateway.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is being deleted
-		finalizerRes, err = r.finalizeGateway(ctx, gateway)
+		var res ctrl.Result
+		res, err = r.finalizeGateway(ctx, gateway)
 		if err != nil {
-			return finalizerRes, err
+			return ctrl.Result{}, err
 		}
-		return finalizerRes, nil
+		return res, nil
+	}
+
+	// The object is not being deleted, so if it does not have our finalizer,
+	// then let's add the finalizer and update the object. This is equivalent
+	// to registering our finalizer.
+	finalizerRes, err := r.updateGatewayFinalizer(ctx, gateway)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	resourcesRes, err := r.reconcileResources(ctx, gateway)
