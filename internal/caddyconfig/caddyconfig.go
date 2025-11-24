@@ -57,10 +57,6 @@ func WithHost(name string) Option {
 func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 	o := makeOptions(opts)
 
-	if gw == nil {
-		return nil, fmt.Errorf("gateway is nil")
-	}
-
 	sites := map[string]map[string]struct{}{}
 	for _, l := range gw.Spec.Listeners {
 		for _, hr := range o.HTTPRoutes {
