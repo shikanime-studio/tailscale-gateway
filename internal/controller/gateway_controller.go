@@ -208,6 +208,12 @@ func (r *GatewayReconciler) reconcileResources(
 		tsconfig.WithHTTPRoutes(hrs),
 	)
 	if err != nil {
+		r.setGatewayAcceptedCondition(
+			gw,
+			metav1.ConditionFalse,
+			gatewayv1.GatewayReasonInvalid,
+			fmt.Sprintf("Failed to build Tailscale config: %v", err),
+		)
 		return fmt.Errorf("failed to build Tailscale config: %w", err)
 	}
 
