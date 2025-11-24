@@ -820,12 +820,15 @@ func (r *GatewayReconciler) updateStatusAddresses(
 	}
 }
 
-// results returns the first result with a RequeueAfter value greater than 0.
+// results returns the first result with a Requeue or RequeueAfter value greater than 0.
 func (r *GatewayReconciler) results(
 	results ...ctrl.Result,
 ) ctrl.Result {
 	var res ctrl.Result
 	for _, r := range results {
+		if r.Requeue {
+			res.Requeue = true
+		}
 		if r.RequeueAfter > 0 {
 			res.RequeueAfter = r.RequeueAfter
 		}
