@@ -77,10 +77,12 @@
                         run = mkWorkflowRun [
                           "nix"
                           "shell"
+                          "nixpkgs#ko"
                           "nixpkgs#skaffold"
                           "--"
                           "build"
-                          "--platform" "linux/amd64,linux/arm64"
+                          "--platform"
+                          "linux/amd64,linux/arm64"
                         ];
                       }
                     ];
