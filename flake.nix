@@ -76,6 +76,26 @@
                         "linux/amd64,linux/arm64"
                       ];
                     }
+                    {
+                      run = mkWorkflowRun [
+                        "nix"
+                        "shell"
+                        "nixpkgs#ko"
+                        "nixpkgs#skaffold"
+                        "--command"
+                        "skaffold"
+                        "render"
+                        "--output"
+                        "manifests.yaml"
+                      ];
+                    }
+                    {
+                      uses = "actions/upload-artifact@v4";
+                      "with" = {
+                        name = "manifests";
+                        path = "manifests.yaml";
+                      };
+                    }
                   ];
                 };
               };
