@@ -1,5 +1,5 @@
 jobs:
-  build-containers:
+  build:
     permissions:
       packages: write
     runs-on: ubuntu-latest
@@ -24,28 +24,6 @@ jobs:
       - run:
           nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold build --platform
           linux/amd64,linux/arm64
-  build-manifests:
-    runs-on: ubuntu-latest
-    steps:
-      - id: createGithubAppToken
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ vars.OPERATOR_APP_ID }}
-          private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          token: ${{ steps.createGithubAppToken.outputs.token }}
-      - uses: shikanime-studio/setup-nix-action@v1
-        with:
-          github-token: ${{ steps.createGithubAppToken.outputs.token }}
-      - run:
-          nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold render --output
-          tailscale-gateway.yaml
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tailscale-gateway
-          path: tailscale-gateway.yaml
 name: Build
 "on":
   workflow_run:

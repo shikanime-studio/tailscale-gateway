@@ -57,58 +57,28 @@
                     types = [ "completed" ];
                   };
                 };
-                jobs = {
-                  build-containers = with config.devenv.shells.default.github.lib; {
-                    permissions.packages = "write";
-                    "runs-on" = "ubuntu-latest";
-                    steps = with config.devenv.shells.default.github.actions; [
-                      create-github-app-token
-                      checkout
-                      setup-nix
-                      docker-login
-                      {
-                        run = mkWorkflowRun [
-                          "nix"
-                          "shell"
-                          "nixpkgs#ko"
-                          "nixpkgs#skaffold"
-                          "--command"
-                          "skaffold"
-                          "build"
-                          "--platform"
-                          "linux/amd64,linux/arm64"
-                        ];
-                      }
-                    ];
-                  };
-                  build-manifests = with config.devenv.shells.default.github.lib; {
-                    "runs-on" = "ubuntu-latest";
-                    steps = with config.devenv.shells.default.github.actions; [
-                      create-github-app-token
-                      checkout
-                      setup-nix
-                      {
-                        run = mkWorkflowRun [
-                          "nix"
-                          "shell"
-                          "nixpkgs#ko"
-                          "nixpkgs#skaffold"
-                          "--command"
-                          "skaffold"
-                          "render"
-                          "--output"
-                          "tailscale-gateway.yaml"
-                        ];
-                      }
-                      {
-                        uses = "actions/upload-artifact@v4";
-                        "with" = {
-                          name = "tailscale-gateway";
-                          path = "tailscale-gateway.yaml";
-                        };
-                      }
-                    ];
-                  };
+                jobs.build = with config.devenv.shells.default.github.lib; {
+                  permissions.packages = "write";
+                  "runs-on" = "ubuntu-latest";
+                  steps = with config.devenv.shells.default.github.actions; [
+                    create-github-app-token
+                    checkout
+                    setup-nix
+                    docker-login
+                    {
+                      run = mkWorkflowRun [
+                        "nix"
+                        "shell"
+                        "nixpkgs#ko"
+                        "nixpkgs#skaffold"
+                        "--command"
+                        "skaffold"
+                        "build"
+                        "--platform"
+                        "linux/amd64,linux/arm64"
+                      ];
+                    }
+                  ];
                 };
               };
             };
