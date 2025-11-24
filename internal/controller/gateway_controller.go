@@ -137,7 +137,10 @@ func (r *GatewayReconciler) updateGatewayFinalizer(
 }
 
 // finalizeGateway handles any external dependencies and removes the finalizer.
-func (r *GatewayReconciler) finalizeGateway(ctx context.Context, gw *gatewayv1.Gateway) (ctrl.Result, error) {
+func (r *GatewayReconciler) finalizeGateway(
+	ctx context.Context,
+	gw *gatewayv1.Gateway,
+) (ctrl.Result, error) {
 	// The object is being deleted
 	if controllerutil.ContainsFinalizer(gw, FinalizerTailscale) {
 		// our finalizer is present, so let's handle any external dependency
