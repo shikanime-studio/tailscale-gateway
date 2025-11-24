@@ -29,7 +29,7 @@ func New() (*Config, error) {
 	if err := v.BindEnv("health_probe_bind_address", "HEALTH_PROBE_BIND_ADDRESS"); err != nil {
 		return nil, err
 	}
-	if err := v.BindEnv("ts_image", "TS_IMAGE"); err != nil {
+	if err := v.BindEnv("ts_image", "TAILSCALE_IMAGE"); err != nil {
 		return nil, err
 	}
 	if err := v.BindEnv("ts_tags", "TAILSCALE_TAGS", "ts_tags"); err != nil {
@@ -57,7 +57,6 @@ func (c *Config) GetMetricsBindAddress() string {
 func (c *Config) GetHealthProbeBindAddress() string {
 	return c.v.GetString("health_probe_bind_address")
 }
-
 
 // GetTailscaleImage returns the tailscale daemon container image.
 func (c *Config) GetTailscaleImage() string {
