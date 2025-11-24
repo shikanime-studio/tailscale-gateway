@@ -684,7 +684,12 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 	}
 
 	msg := "Gateway programmed"
-	r.setGatewayProgrammedCondition(gw, metav1.ConditionTrue, gatewayv1.GatewayReasonProgrammed, msg)
+	r.setGatewayProgrammedCondition(
+		gw,
+		metav1.ConditionTrue,
+		gatewayv1.GatewayReasonProgrammed,
+		msg,
+	)
 
 	gw.Status.Listeners = nil
 	for _, listener := range gw.Spec.Listeners {
