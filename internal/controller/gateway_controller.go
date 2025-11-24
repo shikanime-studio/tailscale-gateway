@@ -744,6 +744,7 @@ func (r *GatewayReconciler) setListenerProgrammedCondition(
 	return meta.SetStatusCondition(&ls.Conditions, programmed)
 }
 
+// updateStatusAddresses updates the Addresses status field of the Gateway.
 func (r *GatewayReconciler) updateStatusAddresses(
 	gw *gatewayv1.Gateway,
 	hrs []*gatewayv1.HTTPRoute,
