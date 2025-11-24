@@ -49,7 +49,7 @@ Apply the provided Kustomize overlay to install the controller, RBAC,
 ServiceAccount, metrics Service, and the `GatewayClass` named `tailscale`:
 
 ```shell
-kubectl apply -k ./manifests/gateway
+kubectl apply -k https://github.com/shikanime-studio/tailscale-gateway/manifests/gateway
 ```
 
 Check status:
