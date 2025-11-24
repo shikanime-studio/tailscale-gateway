@@ -208,58 +208,24 @@ func (r *GatewayReconciler) reconcileResources(
 		tsconfig.WithHTTPRoutes(hrs),
 	)
 	if err != nil {
-		r.setGatewayAcceptedCondition(
-			gw,
-			metav1.ConditionFalse,
-			gatewayv1.GatewayReasonInvalid,
-			fmt.Sprintf("Failed to build Tailscale config: %v", err),
-		)
+		return fmt.Errorf("failed to build Tailscale config: %w", err)
 	}
 
 	gw.Status.Listeners = nil
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return r.reconcileSecret(gctx, gw) })
-	if cfg != nil {
-		g.Go(func() error { return r.reconcileConfigMap(gctx, gw, cfg) })
-	}
+	g.Go(func() error { return r.reconcileConfigMap(gctx, gw, cfg) })
 	if err = g.Wait(); err != nil {
-		r.setGatewayAcceptedCondition(
-			gw,
-			metav1.ConditionFalse,
-			gatewayv1.GatewayReasonInvalid,
-			fmt.Sprintf("Failed to reconcile resources: %v", err),
-		)
-	} else {
-		r.setGatewayAcceptedCondition(
-			gw,
-			metav1.ConditionTrue,
-			gatewayv1.GatewayReasonAccepted,
-			"Gateway accepted",
-		)
+		return fmt.Errorf("failed to reconcile resources: %w", err)
 	}
 
 	g, gctx = errgroup.WithContext(ctx)
 	g.Go(func() error { return r.reconcileServiceAccount(gctx, gw) })
 	g.Go(func() error { return r.reconcileRBAC(gctx, gw) })
-	if cfg != nil {
-		g.Go(func() error { return r.reconcileDaemonSet(gctx, gw, cfg) })
-	}
+	g.Go(func() error { return r.reconcileDaemonSet(gctx, gw, cfg) })
 	if err = g.Wait(); err != nil {
-		r.setGatewayProgrammedCondition(
-			gw,
-			metav1.ConditionFalse,
-			gatewayv1.GatewayReasonPending,
-			fmt.Sprintf("Failed to reconcile resources: %v", err),
-		)
 		return fmt.Errorf("failed to reconcile resources: %w", err)
-	} else {
-		r.setGatewayProgrammedCondition(
-			gw,
-			metav1.ConditionTrue,
-			gatewayv1.GatewayReasonProgrammed,
-			"Gateway programmed",
-		)
 	}
 
 	r.updateStatusAddresses(gw, hrs)
