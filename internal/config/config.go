@@ -19,7 +19,6 @@ func New() (*Config, error) {
 	v.SetDefault("health_probe_bind_address", ":8081")
 	v.SetDefault("ts_image", "tailscale/tailscale:latest")
 	v.SetDefault("ts_tags", "")
-	v.SetDefault("ts_tailnet", "")
 	v.SetDefault("ts_oauth_client_id", "")
 	v.SetDefault("ts_oauth_client_secret", "")
 	v.SetDefault("ts_key_description", "Ephemeral auth key for gateway provisioning")
@@ -37,9 +36,6 @@ func New() (*Config, error) {
 		return nil, err
 	}
 	if err := v.BindEnv("ts_tags", "TAILSCALE_TAGS", "ts_tags"); err != nil {
-		return nil, err
-	}
-	if err := v.BindEnv("ts_tailnet", "TAILSCALE_TAILNET", "ts_tailnet"); err != nil {
 		return nil, err
 	}
 	if err := v.BindEnv("ts_oauth_client_id", "TAILSCALE_OAUTH_CLIENT_ID", "ts_oauth_client_id"); err != nil {

@@ -4,7 +4,6 @@ A Kubernetes controller that provisions a Tailscale-based Gateway. It reconciles
 
 ## Environment Configuration
 
-- `TAILSCALE_TAILNET`: Tailnet identifier used for API calls
 - `TAILSCALE_OAUTH_CLIENT_ID`: OAuth client ID with scopes allowing key creation
 - `TAILSCALE_OAUTH_CLIENT_SECRET`: OAuth client secret
 - `TAILSCALE_TAGS`: Comma-separated device tags applied to generated auth keys (e.g. `tag:gateway,tag:proxy`)
@@ -42,7 +41,6 @@ Security note: Prefer OAuth-based key generation over storing reusable keys. If 
 - Set environment variables:
 
 ```
-export TAILSCALE_TAILNET=example.com
 export TAILSCALE_OAUTH_CLIENT_ID=...
 export TAILSCALE_OAUTH_CLIENT_SECRET=...
 export TAILSCALE_TAGS="tag:gateway"
