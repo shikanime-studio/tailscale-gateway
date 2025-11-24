@@ -65,14 +65,7 @@
                       create-github-app-token
                       checkout
                       setup-nix
-                      {
-                        uses = "docker/login-action@v3";
-                        "with" = {
-                          registry = "ghcr.io";
-                          username = mkWorkflowRef "github.actor";
-                          password = mkWorkflowRef "secrets.GITHUB_TOKEN";
-                        };
-                      }
+                      docker-login
                       {
                         run = mkWorkflowRun [
                           "nix"
