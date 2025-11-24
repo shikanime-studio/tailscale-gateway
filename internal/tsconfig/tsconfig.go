@@ -206,15 +206,14 @@ func isSupportedMatch(match gatewayv1.HTTPRouteMatch) bool {
 }
 
 // newRootHandler builds an HTTP handler for a BackendRef and root path.
-func newRootHandler(br gatewayv1.HTTPBackendRef, routeNS string) (*ipn.HTTPHandler, error) {
-	return newHTTPHandler(br, "", routeNS)
+func newRootHandler(br gatewayv1.HTTPBackendRef) (*ipn.HTTPHandler, error) {
+	return newHTTPHandler(br, "/")
 }
 
 // newMatchHandler builds an HTTP handler for a BackendRef and path match.
 func newMatchHandler(
 	br gatewayv1.HTTPBackendRef,
 	match gatewayv1.HTTPRouteMatch,
-	routeNS string,
 ) (*ipn.HTTPHandler, error) {
 	if match.Path == nil {
 		return nil, fmt.Errorf("path match is required")
@@ -222,24 +221,21 @@ func newMatchHandler(
 	if match.Path.Value == nil {
 		return nil, fmt.Errorf("path match value is required")
 	}
-	return newHTTPHandler(br, "", routeNS)
+	return newHTTPHandler(br, *match.Path.Value)
 }
 
 // newHTTPHandler builds an HTTP handler for a BackendRef and path.
 func newHTTPHandler(
 	br gatewayv1.HTTPBackendRef,
 	path string,
-	routeNS string,
 ) (*ipn.HTTPHandler, error) {
 	upstream := url.URL{
 		Scheme: "http",
-		Path:   "",
+		Path:   path,
 	}
 	upstream.Host = string(br.Name)
 	if br.Namespace != nil {
 		upstream.Host = fmt.Sprintf("%s.%s", upstream.Host, *br.Namespace)
-	} else if routeNS != "" {
-		upstream.Host = fmt.Sprintf("%s.%s", upstream.Host, routeNS)
 	}
 	if br.Port != nil {
 		upstream.Host = fmt.Sprintf("%s:%d", upstream.Host, *br.Port)
