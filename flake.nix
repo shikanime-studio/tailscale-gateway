@@ -103,8 +103,8 @@
               };
               workflows = {
                 main.settings.jobs = {
-                  needs = [ "check" ];
                   build = {
+                    needs = [ "check" ];
                     permissions.packages = "write";
                     "runs-on" = "ubuntu-latest";
                     steps = with config.devenv.shells.default.github.actions; [
