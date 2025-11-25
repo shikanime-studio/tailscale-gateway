@@ -85,7 +85,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: deploy
-      - run:
+      - env:
+          GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
+        run:
           gh release upload ${{ github.ref_name }} --repo ${{ github.repository }}
           tailscale-gateway.yaml
 name: Release
