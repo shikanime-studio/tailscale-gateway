@@ -90,7 +90,7 @@
                 };
 
                 release-upload-deploy-artifacts = {
-                  env.GITHUB_TOKEN = mkWorkflowRef "github.token";
+                  env.GITHUB_TOKEN = mkWorkflowRef "steps.createGithubAppToken.outputs.token";
                   run = mkWorkflowRun [
                     "gh"
                     "release"
