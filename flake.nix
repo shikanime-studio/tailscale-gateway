@@ -121,6 +121,7 @@
                 release.settings.jobs = {
                   build = {
                     needs = [ "check" ];
+                    "runs-on" = "ubuntu-latest";
                     steps = with config.devenv.shells.default.github.actions; [
                       create-github-app-token
                       checkout
@@ -136,6 +137,8 @@
                       "build"
                       "publish"
                     ];
+                    permissions.packages = "write";
+                    "runs-on" = "ubuntu-latest";
                     steps = with config.devenv.shells.default.github.actions; [
                       create-github-app-token
                       checkout

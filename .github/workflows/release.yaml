@@ -2,6 +2,7 @@ jobs:
   build:
     needs:
       - check
+    runs-on: ubuntu-latest
     steps:
       - id: createGithubAppToken
         uses: actions/create-github-app-token@v2
@@ -70,6 +71,9 @@ jobs:
     needs:
       - build
       - publish
+    permissions:
+      packages: write
+    runs-on: ubuntu-latest
     steps:
       - id: createGithubAppToken
         uses: actions/create-github-app-token@v2
