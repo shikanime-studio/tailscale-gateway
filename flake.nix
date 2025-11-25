@@ -48,6 +48,11 @@
             ];
             github = {
               actions = with config.devenv.shells.default.github.lib; {
+                download-artifacts = {
+                  uses = "actions/download-artifact@v4";
+                  "with".name = "manifests";
+                };
+
                 skaffold-build = {
                   run = mkWorkflowRun [
                     "nix"
@@ -61,6 +66,7 @@
                     "linux/amd64,linux/arm64"
                   ];
                 };
+
                 skaffold-render = {
                   run = mkWorkflowRun [
                     "nix"
@@ -74,6 +80,7 @@
                     "manifests.yaml"
                   ];
                 };
+
                 upload-artifacts = {
                   uses = "actions/upload-artifact@v4";
                   "with" = {
@@ -81,17 +88,23 @@
                     path = "manifests.yaml";
                   };
                 };
+
+                release-upload-manifests = {
+                  run = mkWorkflowRun [
+                    "gh"
+                    "release"
+                    "upload"
+                    (mkWorkflowRef "github.ref_name")
+                    "--repo"
+                    (mkWorkflowRef "github.repository")
+                    "manifests/manifests.yaml"
+                  ];
+                };
               };
-              workflows.build = {
-                enable = true;
-                settings = {
-                  name = "Build";
-                  on.workflow_run = {
-                    workflows = [ "check" ];
-                    branches = [ "main" ];
-                    types = [ "completed" ];
-                  };
-                  jobs.build = {
+              workflows = {
+                main.settings.jobs = {
+                  needs = [ "check" ];
+                  build = {
                     permissions.packages = "write";
                     "runs-on" = "ubuntu-latest";
                     steps = with config.devenv.shells.default.github.actions; [
@@ -102,6 +115,32 @@
                       skaffold-build
                       skaffold-render
                       upload-artifacts
+                    ];
+                  };
+                };
+                release.settings.jobs = {
+                  build = {
+                    needs = [ "check" ];
+                    steps = with config.devenv.shells.default.github.actions; [
+                      create-github-app-token
+                      checkout
+                      setup-nix
+                      docker-login
+                      skaffold-build
+                      skaffold-render
+                      upload-artifacts
+                    ];
+                  };
+                  upload = {
+                    needs = [
+                      "build"
+                      "publish"
+                    ];
+                    steps = with config.devenv.shells.default.github.actions; [
+                      create-github-app-token
+                      checkout
+                      download-artifacts
+                      release-upload-manifests
                     ];
                   };
                 };
