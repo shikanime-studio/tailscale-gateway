@@ -48,7 +48,7 @@
             ];
             github = {
               actions = with config.devenv.shells.default.github.lib; {
-                download-artifacts = {
+                download-manifests-artifacts = {
                   uses = "actions/download-artifact@v4";
                   "with" = {
                     name = "manifests";
@@ -84,7 +84,7 @@
                   ];
                 };
 
-                upload-artifacts = {
+                upload-manifests-artifacts = {
                   uses = "actions/upload-artifact@v5";
                   "with" = {
                     name = "manifests";
@@ -131,7 +131,7 @@
                       setup-nix
                       docker-login
                       skaffold-render
-                      upload-artifacts
+                      upload-manifests-artifacts
                     ];
                   };
                   upload = {
@@ -141,7 +141,7 @@
                     steps = with config.devenv.shells.default.github.actions; [
                       create-github-app-token
                       checkout
-                      download-artifacts
+                      download-manifests-artifacts
                       release-upload-manifests
                     ];
                   };
