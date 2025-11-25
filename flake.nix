@@ -50,10 +50,7 @@
               actions = with config.devenv.shells.default.github.lib; {
                 download-deploy-artifacts = {
                   uses = "actions/download-artifact@v4";
-                  "with" = {
-                    name = "manifests";
-                    path = "outputs";
-                  };
+                  "with".name = "deploy";
                 };
 
                 skaffold-build = {
@@ -86,7 +83,10 @@
 
                 upload-deploy-artifacts = {
                   uses = "actions/upload-artifact@v5";
-                  "with".name = "manifests";
+                  "with" = {
+                    name = "deploy";
+                    path = "tailscale-gateway.yaml";
+                  };
                 };
 
                 release-upload-deploy-artifacts = {
