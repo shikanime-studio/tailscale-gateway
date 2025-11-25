@@ -1,7 +1,9 @@
 jobs:
   build:
     needs:
-      - check
+      - publish
+    permissions:
+      packages: write
     runs-on: ubuntu-latest
     steps:
       - id: createGithubAppToken
@@ -22,35 +24,13 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
       - run:
-          nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold build --platform
-          linux/amd64,linux/arm64
-      - run:
           nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold render --output
           manifests.yaml
       - uses: actions/upload-artifact@v4
         with:
           name: manifests
           path: manifests.yaml
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - id: createGithubAppToken
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ vars.OPERATOR_APP_ID }}
-          private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          token: ${{ steps.createGithubAppToken.outputs.token }}
-      - uses: shikanime-studio/setup-nix-action@v1
-        with:
-          github-token: ${{ steps.createGithubAppToken.outputs.token }}
-      - uses: shikanime-studio/direnv-action@v2
-      - run: nix flake check --accept-flake-config --all-systems --no-pure-eval
   publish:
-    needs:
-      - check
     runs-on: ubuntu-latest
     steps:
       - id: createGithubAppToken
@@ -70,7 +50,6 @@ jobs:
   upload:
     needs:
       - build
-      - publish
     permissions:
       packages: write
     runs-on: ubuntu-latest

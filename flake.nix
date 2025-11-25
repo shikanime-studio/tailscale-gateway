@@ -101,7 +101,7 @@
                   ];
                 };
               };
-              workflows = {
+              workflows = with config.devenv.shells.default.github.lib; {
                 main.settings.jobs = {
                   build = {
                     needs = [ "check" ];
@@ -113,31 +113,26 @@
                       setup-nix
                       docker-login
                       skaffold-build
-                      skaffold-render
-                      upload-artifacts
                     ];
                   };
                 };
                 release.settings.jobs = {
                   build = {
-                    needs = [ "check" ];
+                    needs = [ "publish" ];
+                    permissions.packages = "write";
                     "runs-on" = "ubuntu-latest";
                     steps = with config.devenv.shells.default.github.actions; [
                       create-github-app-token
                       checkout
                       setup-nix
                       docker-login
-                      skaffold-build
                       skaffold-render
                       upload-artifacts
                     ];
                   };
                   upload = {
-                    needs = [
-                      "build"
-                      "publish"
-                    ];
                     permissions.packages = "write";
+                    needs = [ "build" ];
                     "runs-on" = "ubuntu-latest";
                     steps = with config.devenv.shells.default.github.actions; [
                       create-github-app-token
