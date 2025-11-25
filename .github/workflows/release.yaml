@@ -30,7 +30,26 @@ jobs:
         with:
           name: manifests
           path: manifests.yaml
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - id: createGithubAppToken
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.OPERATOR_APP_ID }}
+          private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ steps.createGithubAppToken.outputs.token }}
+      - uses: shikanime-studio/setup-nix-action@v1
+        with:
+          github-token: ${{ steps.createGithubAppToken.outputs.token }}
+      - uses: shikanime-studio/direnv-action@v2
+      - run: nix flake check --accept-flake-config --all-systems --no-pure-eval
   publish:
+    needs:
+      - check
     runs-on: ubuntu-latest
     steps:
       - id: createGithubAppToken
@@ -66,7 +85,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: manifests
-      - run:
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run:
           gh release upload ${{ github.ref_name }} --repo ${{ github.repository }}
           manifests/manifests.yaml
 name: Release

@@ -90,6 +90,7 @@
                 };
 
                 release-upload-manifests = {
+                  env.GITHUB_TOKEN = mkWorkflowRef "github.token";
                   run = mkWorkflowRun [
                     "gh"
                     "release"
