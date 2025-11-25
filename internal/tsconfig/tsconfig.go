@@ -65,6 +65,16 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 	return cfg, nil
 }
 
+// AdvertisedServices returns the service names to advertise.
+func (c *Config) AdvertisedServices() []tailcfg.ServiceName {
+	var svcs []tailcfg.ServiceName
+	for name := range c.cfg.Services {
+		svcs = append(svcs, name)
+	}
+	return svcs
+}
+
+// newServiceName builds a Tailscale service name from a hostname.
 func newServiceName(host gatewayv1.Hostname) tailcfg.ServiceName {
 	return tailcfg.AsServiceName(fmt.Sprintf("svc:%s", host))
 }

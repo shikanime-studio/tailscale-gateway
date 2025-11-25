@@ -116,19 +116,38 @@
             ];
           };
 
-          packages.default = pkgs.buildGoModule {
-            pname = "tailscale-gateway";
-            version = "v0.1.0";
-            src = pkgs.lib.cleanSource ./.;
-            subPackages = [ "cmd/tailscale-gateway-controller" ];
-            vendorHash = "sha256-TrzjYQJMZxW907rpoRMmtJgTIbUC/OMNJzXXlQjcPb4=";
-            meta = with pkgs.lib; {
-              description = "Tailscale Gateway";
-              homepage = "https://github.com/shikanime-studio/tailscale-gateway";
-              license = licenses.asl20;
-              mainProgram = "tailscale-gateway-controller";
+          packages.controller =
+            let
+              controller = pkgs.buildGoModule {
+                pname = "tailscale-gateway";
+                version = "v1.0.0";
+                src = pkgs.lib.cleanSource ./.;
+                subPackages = [ "cmd/tailscale-gateway-controller" ];
+                vendorHash = "sha256-TrzjYQJMZxW907rpoRMmtJgTIbUC/OMNJzXXlQjcPb4=";
+                meta = with pkgs.lib; {
+                  description = "Tailscale Gateway";
+                  homepage = "https://github.com/shikanime-studio/tailscale-gateway";
+                  license = licenses.asl20;
+                  mainProgram = "tailscale-gateway-controller";
+                };
+              };
+            in
+            pkgs.dockerTools.streamLayeredImage {
+              name = controller.pname;
+              tag = controller.meta.version;
+              config = {
+                Labels = {
+                  org.opencontainers.image.description = "A Kubernetes controller that provisions a Tailscale-based Gateway";
+                  org.opencontainers.image.documentation = "https://github.com/shikanime-studio/tailscale-gateway#readme";
+                  org.opencontainers.image.licenses = "Apache-2.0";
+                  org.opencontainers.image.source = "https://github.com/shikanime-studio/tailscale-gateway";
+                  org.opencontainers.image.title = "Tailscale Gateway Controller";
+                  org.opencontainers.image.url = "https://github.com/shikanime-studio/tailscale-gateway";
+                  org.opencontainers.image.vendor = "Shikanime Studio";
+                };
+                Entrypoint = [ controller ];
+              };
             };
-          };
         };
       systems = [
         "x86_64-linux"

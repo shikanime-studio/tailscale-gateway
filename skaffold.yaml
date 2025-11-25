@@ -5,23 +5,8 @@ metadata:
 build:
   artifacts:
     - image: ghcr.io/shikanime-studio/tailscale-gateway/controller
-      ko:
-        dependencies:
-          paths:
-            - cmd/tailscale-gateway-controller
-            - internal
-            - go.mod
-            - go.sum
-        dir: ./cmd/tailscale-gateway-controller
-        fromImage: cgr.dev/chainguard/glibc-dynamic
-        labels:
-          org.opencontainers.image.description: A Kubernetes controller that provisions a Tailscale-based Gateway
-          org.opencontainers.image.documentation: https://github.com/shikanime-studio/tailscale-gateway#readme
-          org.opencontainers.image.licenses: Apache-2.0
-          org.opencontainers.image.source: https://github.com/shikanime-studio/tailscale-gateway
-          org.opencontainers.image.title: Tailscale Gateway Controller
-          org.opencontainers.image.url: https://github.com/shikanime-studio/tailscale-gateway
-          org.opencontainers.image.vendor: Shikanime Studio
+      custom:
+        buildCommand: nix shell nixpkgs#ko nixpkgs#skaffold --command ko build --platform linux/amd64,linux/arm64
 manifests:
   kustomize:
     paths:
