@@ -25,11 +25,11 @@ jobs:
           username: ${{ github.actor }}
       - run:
           nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold render --output
-          manifests.yaml
-      - uses: actions/upload-artifact@v4
+          outputs/manifests.yaml
+      - uses: actions/upload-artifact@v5
         with:
           name: manifests
-          path: manifests.yaml
+          path: outputs/manifests.yaml
   check:
     runs-on: ubuntu-latest
     steps:
@@ -85,11 +85,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: manifests
+          path: outputs
       - env:
           GITHUB_TOKEN: ${{ github.token }}
         run:
           gh release upload ${{ github.ref_name }} --repo ${{ github.repository }}
-          manifests/manifests.yaml
+          outputs/manifests.yaml
 name: Release
 "on":
   push:

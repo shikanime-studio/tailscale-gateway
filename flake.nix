@@ -50,7 +50,10 @@
               actions = with config.devenv.shells.default.github.lib; {
                 download-artifacts = {
                   uses = "actions/download-artifact@v4";
-                  "with".name = "manifests";
+                  "with" = {
+                    name = "manifests";
+                    path = "outputs";
+                  };
                 };
 
                 skaffold-build = {
@@ -77,15 +80,15 @@
                     "skaffold"
                     "render"
                     "--output"
-                    "manifests.yaml"
+                    "outputs/manifests.yaml"
                   ];
                 };
 
                 upload-artifacts = {
-                  uses = "actions/upload-artifact@v4";
+                  uses = "actions/upload-artifact@v5";
                   "with" = {
                     name = "manifests";
-                    path = "manifests.yaml";
+                    path = "outputs/manifests.yaml";
                   };
                 };
 
@@ -98,7 +101,7 @@
                     (mkWorkflowRef "github.ref_name")
                     "--repo"
                     (mkWorkflowRef "github.repository")
-                    "manifests/manifests.yaml"
+                    "outputs/manifests.yaml"
                   ];
                 };
               };
