@@ -25,11 +25,10 @@ jobs:
           username: ${{ github.actor }}
       - run:
           nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold render --output
-          outputs/manifests.yaml
+          tailscale-gateway.yaml
       - uses: actions/upload-artifact@v5
         with:
           name: manifests
-          path: outputs/manifests.yaml
   check:
     runs-on: ubuntu-latest
     steps:
@@ -90,7 +89,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run:
           gh release upload ${{ github.ref_name }} --repo ${{ github.repository }}
-          outputs/manifests.yaml
+          tailscale-gateway.yaml
 name: Release
 "on":
   push:

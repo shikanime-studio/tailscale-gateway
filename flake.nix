@@ -48,7 +48,7 @@
             ];
             github = {
               actions = with config.devenv.shells.default.github.lib; {
-                download-manifests-artifacts = {
+                download-deploy-artifacts = {
                   uses = "actions/download-artifact@v4";
                   "with" = {
                     name = "manifests";
@@ -80,19 +80,16 @@
                     "skaffold"
                     "render"
                     "--output"
-                    "outputs/manifests.yaml"
+                    "tailscale-gateway.yaml"
                   ];
                 };
 
-                upload-manifests-artifacts = {
+                upload-deploy-artifacts = {
                   uses = "actions/upload-artifact@v5";
-                  "with" = {
-                    name = "manifests";
-                    path = "outputs/manifests.yaml";
-                  };
+                  "with".name = "manifests";
                 };
 
-                release-upload-manifests = {
+                release-upload-deploy-artifacts = {
                   env.GITHUB_TOKEN = mkWorkflowRef "github.token";
                   run = mkWorkflowRun [
                     "gh"
@@ -101,7 +98,7 @@
                     (mkWorkflowRef "github.ref_name")
                     "--repo"
                     (mkWorkflowRef "github.repository")
-                    "outputs/manifests.yaml"
+                    "tailscale-gateway.yaml"
                   ];
                 };
               };
@@ -131,7 +128,7 @@
                       setup-nix
                       docker-login
                       skaffold-render
-                      upload-manifests-artifacts
+                      upload-deploy-artifacts
                     ];
                   };
                   upload = {
@@ -141,8 +138,8 @@
                     steps = with config.devenv.shells.default.github.actions; [
                       create-github-app-token
                       checkout
-                      download-manifests-artifacts
-                      release-upload-manifests
+                      download-deploy-artifacts
+                      release-upload-deploy-artifacts
                     ];
                   };
                 };
