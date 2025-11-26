@@ -1,3 +1,4 @@
+// Package utils contains helpers used by the controller.
 package utils
 
 import (
@@ -6,6 +7,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// SetGatewayAcceptedCondition sets the Gateway Accepted condition.
 func SetGatewayAcceptedCondition(
 	gw *gatewayv1.Gateway,
 	status metav1.ConditionStatus,
@@ -23,6 +25,7 @@ func SetGatewayAcceptedCondition(
 	return meta.SetStatusCondition(&gw.Status.Conditions, accepted)
 }
 
+// SetGatewayProgrammedCondition sets the Gateway Programmed condition.
 func SetGatewayProgrammedCondition(
 	gw *gatewayv1.Gateway,
 	status metav1.ConditionStatus,
@@ -40,6 +43,7 @@ func SetGatewayProgrammedCondition(
 	return meta.SetStatusCondition(&gw.Status.Conditions, programmed)
 }
 
+// SetListenerAcceptedCondition sets the Listener Accepted condition.
 func SetListenerAcceptedCondition(
 	ls *gatewayv1.ListenerStatus,
 	gw *gatewayv1.Gateway,
@@ -58,6 +62,7 @@ func SetListenerAcceptedCondition(
 	return meta.SetStatusCondition(&ls.Conditions, accepted)
 }
 
+// SetListenerProgrammedCondition sets the Listener Programmed condition.
 func SetListenerProgrammedCondition(
 	ls *gatewayv1.ListenerStatus,
 	gw *gatewayv1.Gateway,

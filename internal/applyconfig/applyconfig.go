@@ -96,7 +96,7 @@ func WithPreStopCommand(cmd []string) DaemonSetOption {
 }
 
 // makeDaemonSetOptions constructs the default options for the DaemonSet.
-func makeDaemonSetOptions() daemonSetOptions {
+func makeDaemonSetOptions(opts ...DaemonSetOption) daemonSetOptions {
 	var o daemonSetOptions
 	for _, opt := range opts {
 		opt(&o)
@@ -111,7 +111,7 @@ func DaemonSetApply(
 	image string,
 	opts ...DaemonSetOption,
 ) *applyappsv1.DaemonSetApplyConfiguration {
-	o := makeDaemonSetOptions()
+	o := makeDaemonSetOptions(opts)
 	labels := SelectorLabels(gw)
 
 	return applyappsv1.DaemonSet(gw.Name, gw.Namespace).
