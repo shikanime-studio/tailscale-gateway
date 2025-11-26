@@ -1,5 +1,5 @@
-// Package utils contains helpers used by the controller.
-package utils
+// Package reconcilerutil contains helpers used by the reconciler.
+package reconcilerutil
 
 import ctrl "sigs.k8s.io/controller-runtime"
 

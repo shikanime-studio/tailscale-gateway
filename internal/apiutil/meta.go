@@ -1,5 +1,5 @@
 // Package utils contains helpers used by the controller.
-package utils
+package apiutil
 
 import (
 	"k8s.io/apimachinery/pkg/api/meta"

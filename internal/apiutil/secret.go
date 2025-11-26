@@ -1,5 +1,5 @@
 // Package utils contains helpers used by the controller.
-package utils
+package apiutil
 
 import corev1 "k8s.io/api/core/v1"
 

@@ -7,11 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shikanime-studio/tailscale-gateway/internal/apiutil"
 	"github.com/shikanime-studio/tailscale-gateway/internal/applyconfig"
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
+	"github.com/shikanime-studio/tailscale-gateway/internal/reconcilerutil"
 	"github.com/shikanime-studio/tailscale-gateway/internal/tsclient"
 	"github.com/shikanime-studio/tailscale-gateway/internal/tsconfig"
-	"github.com/shikanime-studio/tailscale-gateway/internal/utils"
 	"golang.org/x/sync/errgroup"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -115,7 +116,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		fmt.Sprintf("%s-%s", gateway.Namespace, gateway.Name),
 	)
 
-	return utils.JoinResults(finalizerRes, resourcesRes), nil
+	return reconcilerutil.JoinResults(finalizerRes, resourcesRes), nil
 }
 
 // addFinalizer adds the finalizer to the Gateway if it does not already have it.
@@ -217,7 +218,7 @@ func (r *GatewayReconciler) reconcileResources(
 		tsconfig.WithHTTPRoutes(hrs),
 	)
 	if err != nil {
-		utils.SetGatewayAcceptedCondition(
+		apiutil.SetGatewayAcceptedCondition(
 			gw,
 			metav1.ConditionFalse,
 			gatewayv1.GatewayReasonInvalid,
@@ -286,7 +287,7 @@ func (r *GatewayReconciler) reconcileResources(
 		fmt.Sprintf("%s-%s", gw.Namespace, gw.Name),
 	)
 
-	return utils.JoinResults(secretRes, configMapRes, saRes, rbacRes, dsRes, addrRes), nil
+	return reconcilerutil.JoinResults(secretRes, configMapRes, saRes, rbacRes, dsRes, addrRes), nil
 }
 
 // reconcileServiceAccount applies the ServiceAccount owned by the Gateway.
@@ -339,7 +340,7 @@ func (r *GatewayReconciler) reconcileSecret(
 ) (ctrl.Result, error) {
 	existing, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
 	if err == nil {
-		if !utils.IsAuthKeyGenerationNeeded(existing) {
+		if !apiutil.IsAuthKeyGenerationNeeded(existing) {
 			return ctrl.Result{}, nil
 		}
 	} else if !apierrors.IsNotFound(err) {
@@ -348,7 +349,7 @@ func (r *GatewayReconciler) reconcileSecret(
 
 	stringData, err := r.tailscaleConfigData(ctx)
 	if err != nil {
-		utils.SetGatewayProgrammedCondition(
+		apiutil.SetGatewayProgrammedCondition(
 			gw,
 			metav1.ConditionFalse,
 			gatewayv1.GatewayReasonPending,
@@ -362,7 +363,7 @@ func (r *GatewayReconciler) reconcileSecret(
 	if _, err := r.Kube.CoreV1().
 		Secrets(gw.Namespace).
 		Apply(ctx, apply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true}); err != nil {
-		utils.SetGatewayProgrammedCondition(
+		apiutil.SetGatewayProgrammedCondition(
 			gw,
 			metav1.ConditionFalse,
 			gatewayv1.GatewayReasonPending,
@@ -402,7 +403,7 @@ func (r *GatewayReconciler) reconcileConfigMap(
 ) (ctrl.Result, error) {
 	servicesConfig, err := tsconfig.Marshal(cfg)
 	if err != nil {
-		utils.SetGatewayProgrammedCondition(
+		apiutil.SetGatewayProgrammedCondition(
 			gw,
 			metav1.ConditionFalse,
 			gatewayv1.GatewayReasonPending,
@@ -417,7 +418,7 @@ func (r *GatewayReconciler) reconcileConfigMap(
 	if _, err = r.Kube.CoreV1().
 		ConfigMaps(gw.Namespace).
 		Apply(ctx, apply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true}); err != nil {
-		utils.SetGatewayProgrammedCondition(
+		apiutil.SetGatewayProgrammedCondition(
 			gw,
 			metav1.ConditionFalse,
 			gatewayv1.GatewayReasonPending,
@@ -438,7 +439,7 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 ) (ctrl.Result, error) {
 	postStartCmd, err := tsconfig.AdvertiseServicesCommand(cfg)
 	if err != nil {
-		utils.SetGatewayProgrammedCondition(
+		apiutil.SetGatewayProgrammedCondition(
 			gw,
 			metav1.ConditionFalse,
 			gatewayv1.GatewayReasonPending,
@@ -448,7 +449,7 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 	}
 	preStopCmd, err := tsconfig.DrainServicesCommand(cfg)
 	if err != nil {
-		utils.SetGatewayProgrammedCondition(
+		apiutil.SetGatewayProgrammedCondition(
 			gw,
 			metav1.ConditionFalse,
 			gatewayv1.GatewayReasonPending,
@@ -468,7 +469,7 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 		DaemonSets(gw.Namespace).
 		Apply(ctx, apply, metav1.ApplyOptions{FieldManager: "tailscale-gateway-controller", Force: true})
 	if err != nil {
-		utils.SetGatewayProgrammedCondition(
+		apiutil.SetGatewayProgrammedCondition(
 			gw,
 			metav1.ConditionFalse,
 			gatewayv1.GatewayReasonPending,
@@ -483,7 +484,7 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 			ds.Status.NumberReady,
 			ds.Status.DesiredNumberScheduled,
 		)
-		utils.SetGatewayProgrammedCondition(
+		apiutil.SetGatewayProgrammedCondition(
 			gw,
 			metav1.ConditionFalse,
 			gatewayv1.GatewayReasonPending,
@@ -497,14 +498,14 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 				SupportedKinds: []gatewayv1.RouteGroupKind{{Kind: "HTTPRoute"}},
 				Conditions:     []metav1.Condition{},
 			}
-			utils.SetListenerAcceptedCondition(
+			apiutil.SetListenerAcceptedCondition(
 				&ls,
 				gw,
 				metav1.ConditionTrue,
 				gatewayv1.ListenerReasonAccepted,
 				"Listener accepted",
 			)
-			utils.SetListenerProgrammedCondition(
+			apiutil.SetListenerProgrammedCondition(
 				&ls,
 				gw,
 				metav1.ConditionFalse,
@@ -517,7 +518,7 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 	}
 
 	msg := "Gateway programmed"
-	utils.SetGatewayProgrammedCondition(
+	apiutil.SetGatewayProgrammedCondition(
 		gw,
 		metav1.ConditionTrue,
 		gatewayv1.GatewayReasonProgrammed,
@@ -531,14 +532,14 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 			SupportedKinds: []gatewayv1.RouteGroupKind{{Kind: "HTTPRoute"}},
 			Conditions:     []metav1.Condition{},
 		}
-		utils.SetListenerAcceptedCondition(
+		apiutil.SetListenerAcceptedCondition(
 			&ls,
 			gw,
 			metav1.ConditionTrue,
 			gatewayv1.ListenerReasonAccepted,
 			"Listener accepted",
 		)
-		utils.SetListenerProgrammedCondition(
+		apiutil.SetListenerProgrammedCondition(
 			&ls,
 			gw,
 			metav1.ConditionTrue,
