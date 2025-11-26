@@ -96,7 +96,7 @@ func WithPreStopCommand(cmd []string) DaemonSetOption {
 }
 
 // makeDaemonSetOptions constructs the default options for the DaemonSet.
-func makeDaemonSetOptions(opts ...DaemonSetOption) daemonSetOptions {
+func makeDaemonSetOptions(opts []DaemonSetOption) daemonSetOptions {
 	var o daemonSetOptions
 	for _, opt := range opts {
 		opt(&o)
