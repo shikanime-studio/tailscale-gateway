@@ -7,11 +7,10 @@ import (
 	"strings"
 	"time"
 
-	applycfg "github.com/shikanime-studio/tailscale-gateway/internal/applyconfig"
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	"github.com/shikanime-studio/tailscale-gateway/internal/tsclient"
 	"github.com/shikanime-studio/tailscale-gateway/internal/tsconfig"
-	utils "github.com/shikanime-studio/tailscale-gateway/internal/utils"
+	"github.com/shikanime-studio/tailscale-gateway/internal/utils"
 	"golang.org/x/sync/errgroup"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
