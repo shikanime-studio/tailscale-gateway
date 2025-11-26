@@ -11,8 +11,8 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// OwnerRef returns a typed OwnerReference pointing to the provided Gateway.
-func OwnerRef(gw *gatewayv1.Gateway) *applymetav1.OwnerReferenceApplyConfiguration {
+// OwnerReference returns a typed OwnerReference pointing to the provided Gateway.
+func OwnerReference(gw *gatewayv1.Gateway) *applymetav1.OwnerReferenceApplyConfiguration {
 	return applymetav1.OwnerReference().
 		WithAPIVersion(gatewayv1.SchemeGroupVersion.String()).
 		WithKind("Gateway").
@@ -40,7 +40,7 @@ func ClusterRoleBindingName(gw *gatewayv1.Gateway) string {
 func ServiceAccountApply(gw *gatewayv1.Gateway) *applycorev1.ServiceAccountApplyConfiguration {
 	return applycorev1.ServiceAccount(gw.Name, gw.Namespace).
 		WithLabels(gw.Labels).
-		WithOwnerReferences(OwnerRef(gw))
+		WithOwnerReferences(OwnerReference(gw))
 }
 
 // ClusterRoleBindingApply constructs an apply configuration for the Gateway RBAC binding.
@@ -49,7 +49,7 @@ func ClusterRoleBindingApply(
 ) *applyrbacv1.ClusterRoleBindingApplyConfiguration {
 	return applyrbacv1.ClusterRoleBinding(ClusterRoleBindingName(gw)).
 		WithLabels(gw.Labels).
-		WithOwnerReferences(OwnerRef(gw)).
+		WithOwnerReferences(OwnerReference(gw)).
 		WithRoleRef(applyrbacv1.RoleRef().WithAPIGroup("rbac.authorization.k8s.io").WithKind("ClusterRole").WithName("tailscale-gateway-proxy")).
 		WithSubjects(applyrbacv1.Subject().WithKind("ServiceAccount").WithName(gw.Name).WithNamespace(gw.Namespace))
 }
@@ -63,7 +63,7 @@ func SecretApply(
 		WithLabels(gw.Labels).
 		WithType(corev1.SecretTypeOpaque).
 		WithStringData(stringData).
-		WithOwnerReferences(OwnerRef(gw))
+		WithOwnerReferences(OwnerReference(gw))
 }
 
 // ConfigMapApply constructs an apply configuration for the Gateway ConfigMap with data.
@@ -74,7 +74,7 @@ func ConfigMapApply(
 	return applycorev1.ConfigMap(gw.Name, gw.Namespace).
 		WithLabels(gw.Labels).
 		WithData(data).
-		WithOwnerReferences(OwnerRef(gw))
+		WithOwnerReferences(OwnerReference(gw))
 }
 
 type daemonSetOptions struct {
@@ -116,7 +116,7 @@ func DaemonSetApply(
 
 	return applyappsv1.DaemonSet(gw.Name, gw.Namespace).
 		WithLabels(gw.Labels).
-		WithOwnerReferences(OwnerRef(gw)).
+		WithOwnerReferences(OwnerReference(gw)).
 		WithSpec(
 			applyappsv1.DaemonSetSpec().
 				WithSelector(applymetav1.LabelSelector().WithMatchLabels(labels)).
