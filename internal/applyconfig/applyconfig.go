@@ -82,13 +82,26 @@ type daemonSetOptions struct {
 	preStopCmd   []string
 }
 
+// DaemonSetOption configures DaemonSet lifecycle behavior.
 type DaemonSetOption func(*daemonSetOptions)
 
+// WithPostStartCommand sets the postStart exec command for the DaemonSet container.
 func WithPostStartCommand(cmd []string) DaemonSetOption {
 	return func(o *daemonSetOptions) { o.postStartCmd = cmd }
 }
+
+// WithPreStopCommand sets the preStop exec command for the DaemonSet container.
 func WithPreStopCommand(cmd []string) DaemonSetOption {
 	return func(o *daemonSetOptions) { o.preStopCmd = cmd }
+}
+
+// makeDaemonSetOptions constructs the default options for the DaemonSet.
+func makeDaemonSetOptions() daemonSetOptions {
+	var o daemonSetOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o
 }
 
 // DaemonSetApply constructs an apply configuration for the DaemonSet that runs
@@ -98,10 +111,7 @@ func DaemonSetApply(
 	image string,
 	opts ...DaemonSetOption,
 ) *applyappsv1.DaemonSetApplyConfiguration {
-	var o daemonSetOptions
-	for _, opt := range opts {
-		opt(&o)
-	}
+	o := makeDaemonSetOptions()
 	labels := SelectorLabels(gw)
 
 	return applyappsv1.DaemonSet(gw.Name, gw.Namespace).
