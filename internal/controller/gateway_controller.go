@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shikanime-studio/tailscale-gateway/internal/applyconfig"
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	"github.com/shikanime-studio/tailscale-gateway/internal/tsclient"
 	"github.com/shikanime-studio/tailscale-gateway/internal/tsconfig"
@@ -293,7 +294,7 @@ func (r *GatewayReconciler) reconcileServiceAccount(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) (ctrl.Result, error) {
-	apply := applycfg.ServiceAccountApply(gw)
+	apply := applyconfig.ServiceAccountApply(gw)
 
 	if _, err := r.Kube.CoreV1().
 		ServiceAccounts(gw.Namespace).
@@ -315,7 +316,7 @@ func (r *GatewayReconciler) reconcileRBAC(
 		return res, fmt.Errorf("failed to create service account: %w", err)
 	}
 
-	apply := applycfg.ClusterRoleBindingApply(gw)
+	apply := applyconfig.ClusterRoleBindingApply(gw)
 
 	if _, err := r.Kube.RbacV1().
 		ClusterRoleBindings().
@@ -356,7 +357,7 @@ func (r *GatewayReconciler) reconcileSecret(
 		return ctrl.Result{}, fmt.Errorf("failed to create Tailscale auth key: %w", err)
 	}
 
-	apply := applycfg.SecretApply(gw, stringData)
+	apply := applyconfig.SecretApply(gw, stringData)
 
 	if _, err := r.Kube.CoreV1().
 		Secrets(gw.Namespace).
@@ -411,7 +412,7 @@ func (r *GatewayReconciler) reconcileConfigMap(
 	}
 	data := map[string]string{"services.hujson": string(servicesConfig)}
 
-	apply := applycfg.ConfigMapApply(gw, data)
+	apply := applyconfig.ConfigMapApply(gw, data)
 
 	if _, err = r.Kube.CoreV1().
 		ConfigMaps(gw.Namespace).
@@ -456,11 +457,11 @@ func (r *GatewayReconciler) reconcileDaemonSet(
 		return ctrl.Result{}, fmt.Errorf("failed to build drain command: %w", err)
 	}
 
-	apply := applycfg.DaemonSetApply(
+	apply := applyconfig.DaemonSetApply(
 		gw,
 		r.Cfg.GetTailscaleImage(),
-		applycfg.WithPostStartCommand(postStartCmd),
-		applycfg.WithPreStopCommand(preStopCmd),
+		applyconfig.WithPostStartCommand(postStartCmd),
+		applyconfig.WithPreStopCommand(preStopCmd),
 	)
 
 	ds, err := r.Kube.AppsV1().
