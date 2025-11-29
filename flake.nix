@@ -57,7 +57,6 @@
                   uses = "actions/download-artifact@v4";
                   "with".name = "deploy";
                 };
-
                 skaffold-build = {
                   run = mkWorkflowRun [
                     "nix"
