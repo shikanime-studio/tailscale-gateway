@@ -2,6 +2,7 @@ package tsconfig
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"k8s.io/utils/ptr"
@@ -164,7 +165,7 @@ func newHTTPHandlers(hr *gatewayv1.HTTPRoute) (map[string]*ipn.HTTPHandler, erro
 		}
 
 		if len(rule.Matches) == 0 {
-			handler, err := newHTTPHandler(hr, rule.BackendRefs[0])
+			handler, err := newHTTPHandler(rule.BackendRefs[0], "/")
 			if err != nil {
 				return nil, err
 			}
@@ -174,7 +175,7 @@ func newHTTPHandlers(hr *gatewayv1.HTTPRoute) (map[string]*ipn.HTTPHandler, erro
 				if !isSupportedMatch(match) {
 					continue
 				}
-				handler, err := newMatchHandler(hr, rule.BackendRefs[0], match)
+				handler, err := newMatchHandler(rule.BackendRefs[0], match)
 				if err != nil {
 					return nil, err
 				}
@@ -202,7 +203,6 @@ func isSupportedMatch(match gatewayv1.HTTPRouteMatch) bool {
 
 // newMatchHandler builds an HTTP handler for a BackendRef and path match.
 func newMatchHandler(
-	hr *gatewayv1.HTTPRoute,
 	br gatewayv1.HTTPBackendRef,
 	match gatewayv1.HTTPRouteMatch,
 ) (*ipn.HTTPHandler, error) {
@@ -212,24 +212,25 @@ func newMatchHandler(
 	if match.Path.Value == nil {
 		return nil, fmt.Errorf("path match value is required")
 	}
-	return newHTTPHandler(hr, br)
+	return newHTTPHandler(br, *match.Path.Value)
 }
 
 // newHTTPHandler builds an HTTP handler for a BackendRef and path match.
-func newHTTPHandler(hr *gatewayv1.HTTPRoute, br gatewayv1.HTTPBackendRef) (*ipn.HTTPHandler, error) {
+func newHTTPHandler(br gatewayv1.HTTPBackendRef, path string) (*ipn.HTTPHandler, error) {
 	host := string(br.Name)
 	ns := string(*br.Namespace)
-	if ns == "" {
-		ns = hr.Namespace
-	}
 	if ns != "" {
 		host = fmt.Sprintf("%s.%s", host, ns)
 	}
 	if br.Port != nil {
 		host = fmt.Sprintf("%s:%d", host, *br.Port)
 	}
-	proxy := fmt.Sprintf("http://%s", host)
-	return &ipn.HTTPHandler{Proxy: proxy}, nil
+	proxy := url.URL{
+		Scheme: "http",
+		Host:   host,
+		Path:   path,
+	}
+	return &ipn.HTTPHandler{Proxy: proxy.String()}, nil
 }
 
 // AdvertiseServicesCommand returns a shell command to advertise all services.
