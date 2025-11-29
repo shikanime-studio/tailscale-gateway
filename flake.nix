@@ -44,7 +44,6 @@
         {
           config,
           pkgs,
-          lib,
           ...
         }:
         {
@@ -52,7 +51,6 @@
             imports = [
               devlib.devenvModules.shikanime-studio
             ];
-            git-hooks.excludes = lib.mkForce [ "^vendor" ];
             github = {
               actions = with config.devenv.shells.default.github.lib; {
                 download-deploy-artifacts = {
