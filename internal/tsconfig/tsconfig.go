@@ -218,9 +218,8 @@ func newMatchHandler(
 // newHTTPHandler builds an HTTP handler for a BackendRef and path match.
 func newHTTPHandler(br gatewayv1.HTTPBackendRef, path string) (*ipn.HTTPHandler, error) {
 	host := string(br.Name)
-	ns := string(*br.Namespace)
-	if ns != "" {
-		host = fmt.Sprintf("%s.%s", host, ns)
+	if br.Namespace != nil {
+		host = fmt.Sprintf("%s.%s", host, *br.Namespace)
 	}
 	if br.Port != nil {
 		host = fmt.Sprintf("%s:%d", host, *br.Port)
