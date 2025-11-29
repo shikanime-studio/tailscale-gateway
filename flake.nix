@@ -57,33 +57,30 @@
                   uses = "actions/download-artifact@v4";
                   "with".name = "deploy";
                 };
-                skaffold-build = {
-                  run = mkWorkflowRun [
-                    "nix"
-                    "shell"
-                    "nixpkgs#ko"
-                    "nixpkgs#skaffold"
-                    "--command"
-                    "skaffold"
-                    "build"
-                    "--platform"
-                    "linux/amd64,linux/arm64"
-                  ];
-                };
 
-                skaffold-render = {
-                  run = mkWorkflowRun [
-                    "nix"
-                    "shell"
-                    "nixpkgs#ko"
-                    "nixpkgs#skaffold"
-                    "--command"
-                    "skaffold"
-                    "render"
-                    "--output"
-                    "tailscale-gateway.yaml"
-                  ];
-                };
+                skaffold-build.run = mkWorkflowRun [
+                  "nix"
+                  "shell"
+                  "nixpkgs#ko"
+                  "nixpkgs#skaffold"
+                  "--command"
+                  "skaffold"
+                  "build"
+                  "--platform"
+                  "linux/amd64,linux/arm64"
+                ];
+
+                skaffold-render.run = mkWorkflowRun [
+                  "nix"
+                  "shell"
+                  "nixpkgs#ko"
+                  "nixpkgs#skaffold"
+                  "--command"
+                  "skaffold"
+                  "render"
+                  "--output"
+                  "tailscale-gateway.yaml"
+                ];
 
                 upload-deploy-artifacts = {
                   uses = "actions/upload-artifact@v5";
@@ -106,6 +103,7 @@
                   ];
                 };
               };
+
               workflows = with config.devenv.shells.default.github.lib; {
                 push.settings.jobs.build = {
                   permissions.packages = "write";
