@@ -18,11 +18,13 @@ jobs:
       - uses: shikanime-studio/setup-nix-action@v1
         with:
           github-token: ${{ steps.createGithubAppToken.outputs.token }}
-      - uses: docker/login-action@v3
-        with:
-          password: ${{ secrets.GITHUB_TOKEN }}
-          registry: ghcr.io
-          username: ${{ github.actor }}
+      - env:
+          DOCKER_REGISTRY: ghcr.io
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          USERNAME: ${{ github.actor }}
+        run:
+          nix run nixpkgs#docker -- login "$DOCKER_REGISTRY" --username "$USERNAME"
+          --password "$GITHUB_TOKEN"
       - run:
           nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold render --output
           tailscale-gateway.yaml

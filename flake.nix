@@ -47,13 +47,6 @@
             imports = [
               devlib.devenvModules.shikanime-studio
             ];
-            git-hooks = {
-              hooks = {
-                govet.enable = true;
-                revive.enable = true;
-                staticcheck.enable = true;
-              };
-            };
             github = {
               actions = with config.devenv.shells.default.github.lib; {
                 download-deploy-artifacts = {
