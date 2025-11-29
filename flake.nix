@@ -158,7 +158,7 @@
             version = "v0.1.0";
             src = pkgs.lib.cleanSource ./.;
             subPackages = [ "cmd/tailscale-gateway-controller" ];
-            vendorHash = "sha256-TrzjYQJMZxW907rpoRMmtJgTIbUC/OMNJzXXlQjcPb4=";
+            vendorHash = "sha256-c8c8vJnGfLYeZs40fDdmITboccIULE39zapC3Ll++Qc=";
             meta = with pkgs.lib; {
               description = "Tailscale Gateway";
               homepage = "https://github.com/shikanime-studio/tailscale-gateway";
