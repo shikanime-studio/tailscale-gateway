@@ -11,7 +11,7 @@ jobs:
         with:
           app-id: ${{ vars.OPERATOR_APP_ID }}
           private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ steps.createGithubAppToken.outputs.token }}
@@ -38,7 +38,7 @@ jobs:
         with:
           app-id: ${{ vars.OPERATOR_APP_ID }}
           private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ steps.createGithubAppToken.outputs.token }}
@@ -57,15 +57,15 @@ jobs:
         with:
           app-id: ${{ vars.OPERATOR_APP_ID }}
           private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ steps.createGithubAppToken.outputs.token }}
       - env:
           GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
-        run:
-          gh release create ${{ github.ref_name }} --repo ${{ github.repository }}
-          --generate-notes
+          REF_NAME: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: gh release create "$REF_NAME" --repo "$REPO" --generate-notes
   upload:
     needs:
       - build
@@ -78,7 +78,7 @@ jobs:
         with:
           app-id: ${{ vars.OPERATOR_APP_ID }}
           private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ steps.createGithubAppToken.outputs.token }}

@@ -1,5 +1,6 @@
 {
   inputs = {
+    automata.url = "github:shikanime-studio/automata";
     devenv.url = "github:cachix/devenv";
     devlib.url = "github:shikanime-studio/devlib";
     flake-parts.url = "github:hercules-ci/flake-parts";
@@ -46,6 +47,13 @@
             imports = [
               devlib.devenvModules.shikanime-studio
             ];
+            git-hooks = {
+              hooks = {
+                govet.enable = true;
+                revive.enable = true;
+                staticcheck.enable = true;
+              };
+            };
             github = {
               actions = with config.devenv.shells.default.github.lib; {
                 download-deploy-artifacts = {
@@ -103,19 +111,16 @@
                 };
               };
               workflows = with config.devenv.shells.default.github.lib; {
-                main.settings.jobs = {
-                  build = {
-                    needs = [ "check" ];
-                    permissions.packages = "write";
-                    "runs-on" = "ubuntu-latest";
-                    steps = with config.devenv.shells.default.github.actions; [
-                      create-github-app-token
-                      checkout
-                      setup-nix
-                      docker-login
-                      skaffold-build
-                    ];
-                  };
+                push.settings.jobs.build = {
+                  permissions.packages = "write";
+                  "runs-on" = "ubuntu-latest";
+                  steps = with config.devenv.shells.default.github.actions; [
+                    create-github-app-token
+                    checkout
+                    setup-nix
+                    docker-login
+                    skaffold-build
+                  ];
                 };
                 release.settings.jobs = {
                   build = {
