@@ -1,95 +1,97 @@
 jobs:
   build:
     needs:
-    - publish
+      - publish
     permissions:
       packages: write
     runs-on: ubuntu-latest
     steps:
-    - id: createGithubAppToken
-      uses: actions/create-github-app-token@v2
-      with:
-        app-id: ${{ vars.OPERATOR_APP_ID }}
-        private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-        token: ${{ steps.createGithubAppToken.outputs.token }}
-    - uses: shikanime-studio/setup-nix-action@v1
-      with:
-        github-token: ${{ steps.createGithubAppToken.outputs.token }}
-    - uses: docker/login-action@v3
-      with:
-        password: ${{ secrets.GITHUB_TOKEN }}
-        registry: ghcr.io
-        username: ${{ github.actor }}
-    - run: nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold render --output
-        tailscale-gateway.yaml
-    - uses: actions/upload-artifact@v5
-      with:
-        name: deploy
-        path: tailscale-gateway.yaml
+      - id: createGithubAppToken
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.OPERATOR_APP_ID }}
+          private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.createGithubAppToken.outputs.token }}
+      - uses: shikanime-studio/setup-nix-action@v1
+        with:
+          github-token: ${{ steps.createGithubAppToken.outputs.token }}
+      - uses: docker/login-action@v3
+        with:
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+      - run:
+          nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold render --output
+          tailscale-gateway.yaml
+      - uses: actions/upload-artifact@v5
+        with:
+          name: deploy
+          path: tailscale-gateway.yaml
   check:
     runs-on: ubuntu-latest
     steps:
-    - id: createGithubAppToken
-      uses: actions/create-github-app-token@v2
-      with:
-        app-id: ${{ vars.OPERATOR_APP_ID }}
-        private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-        token: ${{ steps.createGithubAppToken.outputs.token }}
-    - uses: shikanime-studio/setup-nix-action@v1
-      with:
-        github-token: ${{ steps.createGithubAppToken.outputs.token }}
-    - uses: shikanime-studio/direnv-action@v2
-    - run: nix flake check --accept-flake-config --all-systems --no-pure-eval
+      - id: createGithubAppToken
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.OPERATOR_APP_ID }}
+          private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.createGithubAppToken.outputs.token }}
+      - uses: shikanime-studio/setup-nix-action@v1
+        with:
+          github-token: ${{ steps.createGithubAppToken.outputs.token }}
+      - uses: shikanime-studio/direnv-action@v2
+      - run: nix flake check --accept-flake-config --all-systems --no-pure-eval
   publish:
     needs:
-    - check
+      - check
     runs-on: ubuntu-latest
     steps:
-    - id: createGithubAppToken
-      uses: actions/create-github-app-token@v2
-      with:
-        app-id: ${{ vars.OPERATOR_APP_ID }}
-        private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-        token: ${{ steps.createGithubAppToken.outputs.token }}
-    - env:
-        GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
-        REF_NAME: ${{ github.ref_name }}
-        REPO: ${{ github.repository }}
-      run: gh release create "$REF_NAME" --repo "$REPO" --generate-notes
+      - id: createGithubAppToken
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.OPERATOR_APP_ID }}
+          private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.createGithubAppToken.outputs.token }}
+      - env:
+          GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
+          REF_NAME: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: gh release create "$REF_NAME" --repo "$REPO" --generate-notes
   upload:
     needs:
-    - build
+      - build
     permissions:
       packages: write
     runs-on: ubuntu-latest
     steps:
-    - id: createGithubAppToken
-      uses: actions/create-github-app-token@v2
-      with:
-        app-id: ${{ vars.OPERATOR_APP_ID }}
-        private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-        token: ${{ steps.createGithubAppToken.outputs.token }}
-    - uses: actions/download-artifact@v4
-      with:
-        name: deploy
-    - env:
-        GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
-      run: gh release upload ${{ github.ref_name }} --repo ${{ github.repository }}
-        tailscale-gateway.yaml
+      - id: createGithubAppToken
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.OPERATOR_APP_ID }}
+          private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.createGithubAppToken.outputs.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: deploy
+      - env:
+          GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
+        run:
+          gh release upload ${{ github.ref_name }} --repo ${{ github.repository }}
+          tailscale-gateway.yaml
 name: Release
-'on':
+"on":
   push:
     tags:
-    - v?[0-9]+.[0-9]+.[0-9]+*
+      - v?[0-9]+.[0-9]+.[0-9]+*
