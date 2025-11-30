@@ -116,6 +116,7 @@
                     skaffold-build
                   ];
                 };
+
                 release.settings.jobs = {
                   build = {
                     needs = [ "publish" ];
@@ -130,6 +131,7 @@
                       upload-deploy-artifacts
                     ];
                   };
+
                   upload = {
                     permissions.packages = "write";
                     needs = [ "build" ];
