@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/shikanime-studio/tailscale-gateway/internal/config"
-	tsconfig "github.com/shikanime-studio/tailscale-gateway/internal/tsconfig"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,6 +16,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
+
+	"github.com/shikanime-studio/tailscale-gateway/internal/config"
+	tsconfig "github.com/shikanime-studio/tailscale-gateway/internal/tsconfig"
 )
 
 // TestGatewayReconciler_Reconcile verifies reconciliation updates Gateway
@@ -266,7 +267,7 @@ func TestServicesApplyBuildsTargets(t *testing.T) {
 		},
 	}
 
-	var opts []tsconfig.Option
+	opts := make([]tsconfig.Option, 0, len(routes))
 	for i := range routes {
 		rt := routes[i]
 		opts = append(opts, tsconfig.WithHTTPRoutes([]*gatewayv1.HTTPRoute{&rt}))

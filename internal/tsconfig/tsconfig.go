@@ -50,8 +50,15 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 
 	cfg := &Config{cfg: &ipn.ServeConfig{Services: map[tailcfg.ServiceName]*ipn.ServiceConfig{}}}
 	for _, hr := range o.HTTPRoutes {
-		for _, svcName := range hr.Spec.Hostnames {
-			svcName := newServiceName(svcName)
+		var serviceNames []tailcfg.ServiceName
+		if len(hr.Spec.Hostnames) == 0 {
+			serviceNames = []tailcfg.ServiceName{tailcfg.AsServiceName(fmt.Sprintf("svc:%s", gw.Name))}
+		} else {
+			for _, hn := range hr.Spec.Hostnames {
+				serviceNames = append(serviceNames, newServiceName(hn))
+			}
+		}
+		for _, svcName := range serviceNames {
 			if _, ok := cfg.cfg.Services[svcName]; !ok {
 				svc, err := newServiceConfig(gw, hr)
 				if err != nil {
@@ -91,7 +98,7 @@ func newTCPPortHandlers(gw *gatewayv1.Gateway) map[uint16]*ipn.TCPPortHandler {
 			tcp[uint16(l.Port)] = &ipn.TCPPortHandler{HTTP: true}
 		case gatewayv1.HTTPSProtocolType:
 			tcp[uint16(l.Port)] = &ipn.TCPPortHandler{HTTPS: true}
-		default:
+		case gatewayv1.TLSProtocolType, gatewayv1.TCPProtocolType, gatewayv1.UDPProtocolType:
 			continue
 		}
 	}
@@ -114,10 +121,15 @@ func newWebServerConfigs(
 			if !isSupportedProtocol(l.Protocol) {
 				return nil, fmt.Errorf("only HTTP and HTTPS protocols are supported")
 			}
+			var hosts []string
 			if len(hr.Spec.Hostnames) == 0 {
-				return nil, fmt.Errorf("at least one hostname is required")
+				hosts = []string{gw.Name}
+			} else {
+				for _, h := range hr.Spec.Hostnames {
+					hosts = append(hosts, string(h))
+				}
 			}
-			for _, h := range hr.Spec.Hostnames {
+			for _, h := range hosts {
 				addr := ipn.HostPort(fmt.Sprintf("%s:%d", h, l.Port))
 				handlers, err := newHTTPHandlers(hr)
 				if err != nil {
@@ -135,7 +147,7 @@ func newWebServerConfigs(
 func isParentGateway(gw *gatewayv1.Gateway, pr *gatewayv1.ParentReference) bool {
 	gwNs := gatewayv1.Namespace(gw.Namespace)
 	prNs := ptr.Deref(pr.Namespace, gwNs)
-	return string(pr.Name) == string(gw.Name) && (prNs == gwNs)
+	return string(pr.Name) == gw.Name && (prNs == gwNs)
 }
 
 // isSupportedProtocol returns true if the protocol is supported.
@@ -153,7 +165,7 @@ func newHTTPHandlers(hr *gatewayv1.HTTPRoute) (map[string]*ipn.HTTPHandler, erro
 		}
 
 		if len(rule.Matches) == 0 {
-			handler, err := newRootHandler(rule.BackendRefs[0])
+			handler, err := newHTTPHandler(rule.BackendRefs[0], "/")
 			if err != nil {
 				return nil, err
 			}
@@ -161,7 +173,7 @@ func newHTTPHandlers(hr *gatewayv1.HTTPRoute) (map[string]*ipn.HTTPHandler, erro
 		} else {
 			for _, match := range rule.Matches {
 				if !isSupportedMatch(match) {
-					return nil, fmt.Errorf("only PathMatchPathPrefix is supported")
+					continue
 				}
 				handler, err := newMatchHandler(rule.BackendRefs[0], match)
 				if err != nil {
@@ -183,12 +195,10 @@ func isSupportedMatch(match gatewayv1.HTTPRouteMatch) bool {
 	if match.Path.Value == nil {
 		return false
 	}
+	if match.Path.Type == nil {
+		return true
+	}
 	return *match.Path.Type == gatewayv1.PathMatchPathPrefix
-}
-
-// newRootHandler builds an HTTP handler for a BackendRef and root path.
-func newRootHandler(br gatewayv1.HTTPBackendRef) (*ipn.HTTPHandler, error) {
-	return newHTTPHandler(br, "/")
 }
 
 // newMatchHandler builds an HTTP handler for a BackendRef and path match.
@@ -205,25 +215,26 @@ func newMatchHandler(
 	return newHTTPHandler(br, *match.Path.Value)
 }
 
-// newHTTPHandler builds an HTTP handler for a BackendRef and path.
+// newHTTPHandler builds an HTTP handler for a BackendRef and path match.
 func newHTTPHandler(br gatewayv1.HTTPBackendRef, path string) (*ipn.HTTPHandler, error) {
-	upstream := url.URL{
-		Scheme: "http",
-		Path:   path,
-	}
-	upstream.Host = string(br.Name)
+	host := string(br.Name)
 	if br.Namespace != nil {
-		upstream.Host = fmt.Sprintf("%s.%s", upstream.Host, *br.Namespace)
+		host = fmt.Sprintf("%s.%s", host, *br.Namespace)
 	}
 	if br.Port != nil {
-		upstream.Host = fmt.Sprintf("%s:%d", upstream.Host, *br.Port)
+		host = fmt.Sprintf("%s:%d", host, *br.Port)
 	}
-	return &ipn.HTTPHandler{Proxy: upstream.String()}, nil
+	proxy := url.URL{
+		Scheme: "http",
+		Host:   host,
+		Path:   path,
+	}
+	return &ipn.HTTPHandler{Proxy: proxy.String()}, nil
 }
 
 // AdvertiseServicesCommand returns a shell command to advertise all services.
 func AdvertiseServicesCommand(cfg *Config) ([]string, error) {
-	var svcs []string
+	svcs := make([]string, 0, len(cfg.cfg.Services))
 	for svcName := range cfg.cfg.Services {
 		svcs = append(svcs, string(svcName))
 	}
@@ -236,7 +247,7 @@ func AdvertiseServicesCommand(cfg *Config) ([]string, error) {
 
 // DrainServicesCommand returns a shell command to drain all services, ignoring errors.
 func DrainServicesCommand(cfg *Config) ([]string, error) {
-	var svcs []string
+	svcs := make([]string, 0, len(cfg.cfg.Services))
 	for svcName := range cfg.cfg.Services {
 		svcs = append(svcs, string(svcName))
 	}
