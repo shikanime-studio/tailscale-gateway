@@ -4,14 +4,11 @@ package main
 import (
 	"os"
 
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
-	"github.com/shikanime-studio/tailscale-gateway/internal/config"
-	"github.com/shikanime-studio/tailscale-gateway/internal/controller"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	kscheme "k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -19,6 +16,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	versioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
+
+	"github.com/shikanime-studio/tailscale-gateway/internal/config"
+	"github.com/shikanime-studio/tailscale-gateway/internal/controller"
 )
 
 var (
@@ -28,7 +28,7 @@ var (
 
 // init registers Kubernetes and Gateway API schemes used by the manager.
 func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(kscheme.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.AddToScheme(scheme))
 }
 

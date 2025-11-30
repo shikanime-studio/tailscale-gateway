@@ -6,8 +6,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	"tailscale.com/client/tailscale/v2"
+
+	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 )
 
 // TailscaleClient wraps the Tailscale API client and configuration to perform
