@@ -14,7 +14,7 @@ jobs:
       - uses: shikanime-studio/setup-nix-action@v1
         with:
           github-token: ${{ steps.createGithubAppToken.outputs.token }}
-      - uses: shikanime-studio/direnv-action@v2
+      - run: nix fmt
       - uses: shikanime-studio/automata-action@v1
         with:
           ghstack-username: operator6o

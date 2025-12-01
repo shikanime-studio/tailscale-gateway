@@ -16,7 +16,6 @@ jobs:
       - uses: shikanime-studio/setup-nix-action@v1
         with:
           github-token: ${{ steps.createGithubAppToken.outputs.token }}
-      - uses: shikanime-studio/direnv-action@v2
       - run: nix flake check --accept-flake-config --all-systems --no-pure-eval
   merge:
     if: contains(github.event.pull_request.labels.*.name, 'auto')
@@ -64,7 +63,7 @@ jobs:
         if:
           github.event.pull_request.user.login == 'yorha-operator-6o[bot]' || github.event.pull_request.user.login
           == 'dependabot[bot]'
-        run: gh pr edit "$PR_NUMBER" --add-label dependencies --assignee @yorha-operator-6o
+        run: gh pr edit "$PR_NUMBER" --add-label dependencies --add-assignee @yorha-operator-6o
       - env:
           GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
