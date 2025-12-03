@@ -27,7 +27,7 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 	// Setup test environment
 	s := runtime.NewScheme()
 	_ = kscheme.AddToScheme(s)
-	_ = gatewayv1.AddToScheme(s)
+	_ = gatewayv1.Install(s)
 
 	tests := []struct {
 		name          string

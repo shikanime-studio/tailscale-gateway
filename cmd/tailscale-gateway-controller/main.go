@@ -29,7 +29,7 @@ var (
 // init registers Kubernetes and Gateway API schemes used by the manager.
 func init() {
 	utilruntime.Must(kscheme.AddToScheme(scheme))
-	utilruntime.Must(gatewayv1.AddToScheme(scheme))
+	utilruntime.Must(gatewayv1.Install(scheme))
 }
 
 // main starts the controller manager and sets up the Gateway reconciler and

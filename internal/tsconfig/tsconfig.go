@@ -52,7 +52,9 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 	for _, hr := range o.HTTPRoutes {
 		var serviceNames []tailcfg.ServiceName
 		if len(hr.Spec.Hostnames) == 0 {
-			serviceNames = []tailcfg.ServiceName{tailcfg.AsServiceName(fmt.Sprintf("svc:%s", gw.Name))}
+			serviceNames = []tailcfg.ServiceName{
+				tailcfg.AsServiceName(fmt.Sprintf("svc:%s", gw.Name)),
+			}
 		} else {
 			for _, hn := range hr.Spec.Hostnames {
 				serviceNames = append(serviceNames, newServiceName(hn))
