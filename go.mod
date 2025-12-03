@@ -1,6 +1,6 @@
 module github.com/shikanime-studio/tailscale-gateway
 
-go 1.25.3
+go 1.24
 
 require (
 	github.com/spf13/viper v1.21.0
