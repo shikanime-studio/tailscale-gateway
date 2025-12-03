@@ -21,6 +21,10 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           sign-commits: true
           username: Operator 6O <operator6o@shikanime.studio>
+      - env:
+          GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
+          PR_HTML_URL: ${{ github.event.issue.pull_request.html_url }}
+        run: gh pr comment "$PR_HTML_URL" --body .land
 name: Land
 "on":
   issue_comment:

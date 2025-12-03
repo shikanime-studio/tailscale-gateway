@@ -78,16 +78,16 @@ func TestMarshal_WithRouteOptions(t *testing.T) {
 	if len(svc.Web) == 0 {
 		t.Fatalf("expected Web entries")
 	}
-    found := false
-    for _, w := range svc.Web {
-        if h, ok := w.Handlers["/"]; ok && h.Proxy == "http://svc:8080/" {
-            found = true
-            break
-        }
-    }
-    if !found {
-        t.Fatalf("expected Proxy http://svc:8080/ in handlers")
-    }
+	found := false
+	for _, w := range svc.Web {
+		if h, ok := w.Handlers["/"]; ok && h.Proxy == "http://svc:8080/" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected Proxy http://svc:8080/ in handlers")
+	}
 }
 
 // TestMarshal_HandlersWithPathMatches ensures prefix path matches are encoded
@@ -153,15 +153,15 @@ func TestMarshal_HandlersWithPathMatches(t *testing.T) {
 	}
 	// Assert at least one web address has the prefix handler pointing to backend
 	found := false
-    for _, w := range svc.Web {
-        if h, ok := w.Handlers[prefix]; ok && h.Proxy == "http://svc:8080/api" {
-            found = true
-            break
-        }
-    }
-    if !found {
-        t.Fatalf("expected handler for %s with proxy http://svc:8080/api", prefix)
-    }
+	for _, w := range svc.Web {
+		if h, ok := w.Handlers[prefix]; ok && h.Proxy == "http://svc:8080/api" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected handler for %s with proxy http://svc:8080/api", prefix)
+	}
 }
 
 // TestNewConfig_ErrorsOnMultipleBackendRefs asserts an error is returned when a
@@ -278,17 +278,17 @@ func TestMarshal_IgnoresNonPrefixPathMatches(t *testing.T) {
 	// Assert prefix present and exact absent
 	hasPrefix := false
 	hasExact := false
-    for _, w := range svc.Web {
-        if h, ok := w.Handlers[prefix]; ok && h.Proxy == "http://svc:8080/api" {
-            hasPrefix = true
-        }
-        if _, ok := w.Handlers[exact]; ok {
-            hasExact = true
-        }
-    }
-    if !hasPrefix {
-        t.Fatalf("expected handler for prefix %s", prefix)
-    }
+	for _, w := range svc.Web {
+		if h, ok := w.Handlers[prefix]; ok && h.Proxy == "http://svc:8080/api" {
+			hasPrefix = true
+		}
+		if _, ok := w.Handlers[exact]; ok {
+			hasExact = true
+		}
+	}
+	if !hasPrefix {
+		t.Fatalf("expected handler for prefix %s", prefix)
+	}
 	if hasExact {
 		t.Fatalf("did not expect handler for exact %s", exact)
 	}

@@ -29,9 +29,6 @@ jobs:
           \ || true\ndone\n"
 name: Cleanup
 "on":
-  check_suite:
-    types:
-      - completed
   pull_request:
     types:
       - closed

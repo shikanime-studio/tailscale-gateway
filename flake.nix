@@ -146,13 +146,31 @@
                 };
               };
             };
+
             languages.go.enable = true;
+
             packages = [
               pkgs.ko
               pkgs.kubectl
               pkgs.skaffold
-              pkgs.sops
             ];
+
+            sops = {
+              enable = true;
+              settings.creation_rules = [
+                {
+                  key_groups = [
+                    {
+                      age = [
+                        "age139fcg32lmhxupnz5wjex44jur7v7wzf9rttp2grnjmxhukck5dmqsd9zj5" # kaltashar
+                        "age1pwl9yz4k4255a4h8qz7lafce8wxhsul0cnqwmr8528fqgujlfshshv3z3g" # telsha
+                        "age1x9v4ps90txy9mk4392uya93tyzx40te4dvns4chg5s6q8mfy03ns74jpay" # nixtar
+                      ];
+                    }
+                  ];
+                }
+              ];
+            };
           };
 
           packages.default = pkgs.buildGoModule {

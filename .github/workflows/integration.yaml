@@ -38,13 +38,7 @@ jobs:
       - env:
           GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
           PR_HTML_URL: ${{ github.event.issue.pull_request.html_url }}
-        if: contains(github.event.issue.labels.*.name, 'ghstack')
-        run: nix run nixpkgs#sapling -- ghstack land "$PR_HTML_URL"
-      - env:
-          GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
-          PR_HTML_URL: ${{ github.event.issue.pull_request.html_url }}
-        if: "!contains(github.event.issue.labels.*.name, 'ghstack')"
-        run: gh pr merge --auto "$PR_HTML_URL"
+        run: gh pr comment "$PR_HTML_URL" --body .land
   triage:
     runs-on: ubuntu-latest
     steps:
@@ -63,7 +57,7 @@ jobs:
         if:
           github.event.pull_request.user.login == 'yorha-operator-6o[bot]' || github.event.pull_request.user.login
           == 'dependabot[bot]'
-        run: gh pr edit "$PR_NUMBER" --add-label dependencies --add-assignee @yorha-operator-6o
+        run: gh pr edit "$PR_NUMBER" --add-label dependencies
       - env:
           GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
