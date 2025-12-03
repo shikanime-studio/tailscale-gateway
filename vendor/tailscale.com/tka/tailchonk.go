@@ -19,6 +19,8 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	"tailscale.com/atomicfile"
+	"tailscale.com/tstime"
+	"tailscale.com/util/testenv"
 )
 
 // Chonk implementations provide durable storage for AUMs and other
@@ -92,6 +94,7 @@ type Mem struct {
 	mu          sync.RWMutex
 	aums        map[AUMHash]AUM
 	commitTimes map[AUMHash]time.Time
+	clock       tstime.Clock
 
 	// parentIndex is a map of AUMs to the AUMs for which they are
 	// the parent.
@@ -101,6 +104,23 @@ type Mem struct {
 	parentIndex map[AUMHash][]AUMHash
 
 	lastActiveAncestor *AUMHash
+}
+
+// ChonkMem returns an implementation of Chonk which stores TKA state
+// in-memory.
+func ChonkMem() *Mem {
+	return &Mem{
+		clock: tstime.DefaultClock{},
+	}
+}
+
+// SetClock sets the clock used by [Mem]. This is only for use in tests,
+// and will panic if called from non-test code.
+func (c *Mem) SetClock(clock tstime.Clock) {
+	if !testenv.InTest() {
+		panic("used SetClock in non-test code")
+	}
+	c.clock = clock
 }
 
 func (c *Mem) SetLastActiveAncestor(hash AUMHash) error {
@@ -173,7 +193,7 @@ updateLoop:
 	for _, aum := range updates {
 		aumHash := aum.Hash()
 		c.aums[aumHash] = aum
-		c.commitTimes[aumHash] = time.Now()
+		c.commitTimes[aumHash] = c.now()
 
 		parent, ok := aum.Parent()
 		if ok {
@@ -187,6 +207,16 @@ updateLoop:
 	}
 
 	return nil
+}
+
+// now returns the current time, optionally using the overridden
+// clock if set.
+func (c *Mem) now() time.Time {
+	if c.clock == nil {
+		return time.Now()
+	} else {
+		return c.clock.Now()
+	}
 }
 
 // RemoveAll permanently and completely clears the TKA state.
@@ -668,7 +698,7 @@ const (
 )
 
 // markActiveChain marks AUMs in the active chain.
-// All AUMs that are within minChain ancestors of head are
+// All AUMs that are within minChain ancestors of head, or are marked as young, are
 // marked retainStateActive, and all remaining ancestors are
 // marked retainStateCandidate.
 //
@@ -694,27 +724,30 @@ func markActiveChain(storage Chonk, verdict map[AUMHash]retainState, minChain in
 				// We've reached the end of the chain we have stored.
 				return h, nil
 			}
-			return AUMHash{}, fmt.Errorf("reading active chain (retainStateActive) (%d): %w", i, err)
+			return AUMHash{}, fmt.Errorf("reading active chain (retainStateActive) (%d, %v): %w", i, parent, err)
 		}
 	}
 
 	// If we got this far, we have at least minChain AUMs stored, and minChain number
 	// of ancestors have been marked for retention. We now continue to iterate backwards
-	// till we find an AUM which we can compact to (a Checkpoint AUM).
+	// till we find an AUM which we can compact to: either a Checkpoint AUM which is old
+	// enough, or the genesis AUM.
 	for {
 		h := next.Hash()
 		verdict[h] |= retainStateActive
-		if next.MessageKind == AUMCheckpoint {
-			lastActiveAncestor = h
-			break
-		}
 
 		parent, hasParent := next.Parent()
-		if !hasParent {
-			return AUMHash{}, errors.New("reached genesis AUM without finding an appropriate lastActiveAncestor")
+		isYoung := verdict[h]&retainStateYoung != 0
+
+		if next.MessageKind == AUMCheckpoint {
+			lastActiveAncestor = h
+			if !isYoung || !hasParent {
+				break
+			}
 		}
+
 		if next, err = storage.AUM(parent); err != nil {
-			return AUMHash{}, fmt.Errorf("searching for compaction target: %w", err)
+			return AUMHash{}, fmt.Errorf("searching for compaction target (%v): %w", parent, err)
 		}
 	}
 
@@ -730,7 +763,7 @@ func markActiveChain(storage Chonk, verdict map[AUMHash]retainState, minChain in
 				// We've reached the end of the chain we have stored.
 				break
 			}
-			return AUMHash{}, fmt.Errorf("reading active chain (retainStateCandidate): %w", err)
+			return AUMHash{}, fmt.Errorf("reading active chain (retainStateCandidate, %v): %w", parent, err)
 		}
 	}
 
@@ -768,7 +801,7 @@ func markAncestorIntersectionAUMs(storage Chonk, verdict map[AUMHash]retainState
 	toScan := make([]AUMHash, 0, len(verdict))
 	for h, v := range verdict {
 		if (v & retainAUMMask) == 0 {
-			continue // not marked for retention, so dont need to consider it
+			continue // not marked for retention, so don't need to consider it
 		}
 		if h == candidateAncestor {
 			continue
@@ -842,7 +875,7 @@ func markAncestorIntersectionAUMs(storage Chonk, verdict map[AUMHash]retainState
 	if didAdjustCandidateAncestor {
 		var next AUM
 		if next, err = storage.AUM(candidateAncestor); err != nil {
-			return AUMHash{}, fmt.Errorf("searching for compaction target: %w", err)
+			return AUMHash{}, fmt.Errorf("searching for compaction target (%v): %w", candidateAncestor, err)
 		}
 
 		for {
@@ -858,7 +891,7 @@ func markAncestorIntersectionAUMs(storage Chonk, verdict map[AUMHash]retainState
 				return AUMHash{}, errors.New("reached genesis AUM without finding an appropriate candidateAncestor")
 			}
 			if next, err = storage.AUM(parent); err != nil {
-				return AUMHash{}, fmt.Errorf("searching for compaction target: %w", err)
+				return AUMHash{}, fmt.Errorf("searching for compaction target (%v): %w", parent, err)
 			}
 		}
 	}
@@ -871,7 +904,7 @@ func markDescendantAUMs(storage Chonk, verdict map[AUMHash]retainState) error {
 	toScan := make([]AUMHash, 0, len(verdict))
 	for h, v := range verdict {
 		if v&retainAUMMask == 0 {
-			continue // not marked, so dont need to mark descendants
+			continue // not marked, so don't need to mark descendants
 		}
 		toScan = append(toScan, h)
 	}
@@ -917,11 +950,11 @@ func Compact(storage CompactableChonk, head AUMHash, opts CompactionOptions) (la
 		verdict[h] = 0
 	}
 
-	if lastActiveAncestor, err = markActiveChain(storage, verdict, opts.MinChain, head); err != nil {
-		return AUMHash{}, fmt.Errorf("marking active chain: %w", err)
-	}
 	if err := markYoungAUMs(storage, verdict, opts.MinAge); err != nil {
 		return AUMHash{}, fmt.Errorf("marking young AUMs: %w", err)
+	}
+	if lastActiveAncestor, err = markActiveChain(storage, verdict, opts.MinChain, head); err != nil {
+		return AUMHash{}, fmt.Errorf("marking active chain: %w", err)
 	}
 	if err := markDescendantAUMs(storage, verdict); err != nil {
 		return AUMHash{}, fmt.Errorf("marking descendant AUMs: %w", err)

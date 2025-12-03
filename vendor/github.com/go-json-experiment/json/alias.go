@@ -600,8 +600,9 @@ func UnmarshalRead(in io.Reader, out any, opts ...Options) (err error) {
 // Unlike [Unmarshal] and [UnmarshalRead], decode options are ignored because
 // they must have already been specified on the provided [jsontext.Decoder].
 //
-// The input may be a stream of one or more JSON values,
+// The input may be a stream of zero or more JSON values,
 // where this only unmarshals the next JSON value in the stream.
+// If there are no more top-level JSON values, it reports [io.EOF].
 // The output must be a non-nil pointer.
 // See [Unmarshal] for details about the conversion of JSON into a Go value.
 func UnmarshalDecode(in *jsontext.Decoder, out any, opts ...Options) (err error) {
@@ -724,6 +725,10 @@ func UnmarshalFromFunc[T any](fn func(*jsontext.Decoder, T) error) *Unmarshalers
 //
 // It is recommended that implementations return a buffer that is safe
 // for the caller to retain and potentially mutate.
+//
+// If the returned error is a [SemanticError], then unpopulated fields
+// of the error may be populated by [json] with additional context.
+// Errors of other types are wrapped within a [SemanticError].
 type Marshaler = json.Marshaler
 
 // MarshalerTo is implemented by types that can marshal themselves.
@@ -735,6 +740,11 @@ type Marshaler = json.Marshaler
 //
 // The implementation must write only one JSON value to the Encoder and
 // must not retain the pointer to [jsontext.Encoder].
+//
+// If the returned error is a [SemanticError], then unpopulated fields
+// of the error may be populated by [json] with additional context.
+// Errors of other types are wrapped within a [SemanticError],
+// unless it is an IO error.
 type MarshalerTo = json.MarshalerTo
 
 // Unmarshaler is implemented by types that can unmarshal themselves.
@@ -748,6 +758,10 @@ type MarshalerTo = json.MarshalerTo
 // unmarshaling into a pre-populated value.
 //
 // Implementations must not retain or mutate the input []byte.
+//
+// If the returned error is a [SemanticError], then unpopulated fields
+// of the error may be populated by [json] with additional context.
+// Errors of other types are wrapped within a [SemanticError].
 type Unmarshaler = json.Unmarshaler
 
 // UnmarshalerFrom is implemented by types that can unmarshal themselves.
@@ -762,6 +776,11 @@ type Unmarshaler = json.Unmarshaler
 // unmarshaling into a pre-populated value.
 //
 // Implementations must not retain the pointer to [jsontext.Decoder].
+//
+// If the returned error is a [SemanticError], then unpopulated fields
+// of the error may be populated by [json] with additional context.
+// Errors of other types are wrapped within a [SemanticError],
+// unless it is a [jsontext.SyntacticError] or an IO error.
 type UnmarshalerFrom = json.UnmarshalerFrom
 
 // ErrUnknownName indicates that a JSON object member could not be
@@ -771,8 +790,8 @@ type UnmarshalerFrom = json.UnmarshalerFrom
 // The name of an unknown JSON object member can be extracted as:
 //
 //	err := ...
-//	var serr json.SemanticError
-//	if errors.As(err, &serr) && serr.Err == json.ErrUnknownName {
+//	serr, ok := errors.AsType[*json.SemanticError](err)
+//	if ok && serr.Err == json.ErrUnknownName {
 //		ptr := serr.JSONPointer // JSON pointer to unknown name
 //		name := ptr.LastToken() // unknown name itself
 //		...
@@ -783,6 +802,11 @@ var ErrUnknownName = json.ErrUnknownName
 
 // SemanticError describes an error determining the meaning
 // of JSON data as Go data or vice-versa.
+//
+// If a [Marshaler], [MarshalerTo], [Unmarshaler], or [UnmarshalerFrom] method
+// returns a SemanticError when called by the [json] package,
+// then the ByteOffset, JSONPointer, and GoType fields are automatically
+// populated by the calling context if they are the zero value.
 //
 // The contents of this error as produced by this package may change over time.
 type SemanticError = json.SemanticError
@@ -868,9 +892,8 @@ func GetOption[T any](opts Options, setter func(T) Options) (T, bool) {
 }
 
 // DefaultOptionsV2 is the full set of all options that define v2 semantics.
-// It is equivalent to all options under [Options], [encoding/json.Options],
-// and [encoding/json/jsontext.Options] being set to false or the zero value,
-// except for the options related to whitespace formatting.
+// It is equivalent to the set of options in [encoding/json.DefaultOptionsV1]
+// all being set to false. All other options are not present.
 func DefaultOptionsV2() Options {
 	return json.DefaultOptionsV2()
 }
