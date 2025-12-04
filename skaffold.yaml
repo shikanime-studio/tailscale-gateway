@@ -22,6 +22,24 @@ build:
           org.opencontainers.image.title: Tailscale Gateway Controller
           org.opencontainers.image.url: https://github.com/shikanime-studio/tailscale-gateway
           org.opencontainers.image.vendor: Shikanime Studio
+    - image: ghcr.io/shikanime-studio/tailscale-gateway/proxy
+      ko:
+        dependencies:
+          paths:
+            - cmd/tailscale-gateway-proxy
+            - internal
+            - go.mod
+            - go.sum
+        dir: ./cmd/tailscale-gateway-proxy
+        fromImage: cgr.dev/chainguard/glibc-dynamic
+        labels:
+          org.opencontainers.image.description: A Tailscale tsnet-based proxy that advertises services
+          org.opencontainers.image.documentation: https://github.com/shikanime-studio/tailscale-gateway#readme
+          org.opencontainers.image.licenses: Apache-2.0
+          org.opencontainers.image.source: https://github.com/shikanime-studio/tailscale-gateway
+          org.opencontainers.image.title: Tailscale Gateway Proxy
+          org.opencontainers.image.url: https://github.com/shikanime-studio/tailscale-gateway
+          org.opencontainers.image.vendor: Shikanime Studio
 manifests:
   kustomize:
     paths:

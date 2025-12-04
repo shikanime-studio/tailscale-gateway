@@ -169,7 +169,7 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 			gwClient := gwfake.NewSimpleClientset(gwObjs...)
 			kubeClient := kfake.NewSimpleClientset()
 
-			cfg, errCfg := config.New()
+			cfg, errCfg := config.NewControllerConfig()
 			if errCfg != nil {
 				t.Fatalf("config init error: %v", errCfg)
 			}
@@ -272,7 +272,7 @@ func TestServicesApplyBuildsTargets(t *testing.T) {
 		rt := routes[i]
 		opts = append(opts, tsconfig.WithHTTPRoutes([]*gatewayv1.HTTPRoute{&rt}))
 	}
-	cfg, err := tsconfig.NewConfig(gw, opts...)
+	cfg, err := tsconfig.NewControllerConfigConfig(gw, opts...)
 	if err != nil {
 		t.Fatalf("new config failed: %v", err)
 	}

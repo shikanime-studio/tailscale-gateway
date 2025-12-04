@@ -1,4 +1,3 @@
-// Package config provides controller configuration loaded from environment variables.
 package config
 
 import (
@@ -7,17 +6,15 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Config wraps application configuration and environment bindings.
-type Config struct{ v *viper.Viper }
+type ControllerConfig struct{ v *viper.Viper }
 
-// New constructs a new Config with defaults and environment bindings.
-func New() (*Config, error) {
+func NewControllerConfig() (*ControllerConfig, error) {
 	v := viper.New()
 	v.AutomaticEnv()
 
 	v.SetDefault("metrics_bind_address", ":8080")
 	v.SetDefault("health_probe_bind_address", ":8081")
-	v.SetDefault("ts_image", "tailscale/tailscale:latest")
+	v.SetDefault("ts_image", "ghcr.io/shikanime-studio/tailscale-gateway/proxy:latest")
 	v.SetDefault("ts_tags", "")
 	v.SetDefault("ts_oauth_client_id", "")
 	v.SetDefault("ts_oauth_client_secret", "")
@@ -45,26 +42,27 @@ func New() (*Config, error) {
 		return nil, err
 	}
 
-	return &Config{v: v}, nil
+	return &ControllerConfig{v: v}, nil
 }
 
-// GetMetricsBindAddress returns the metrics server bind address.
-func (c *Config) GetMetricsBindAddress() string {
+func (c *ControllerConfig) GetMetricsBindAddress() string {
 	return c.v.GetString("metrics_bind_address")
 }
-
-// GetHealthProbeBindAddress returns the health probe bind address.
-func (c *Config) GetHealthProbeBindAddress() string {
+func (c *ControllerConfig) GetHealthProbeBindAddress() string {
 	return c.v.GetString("health_probe_bind_address")
 }
-
-// GetTailscaleImage returns the tailscale daemon container image.
-func (c *Config) GetTailscaleImage() string {
-	return c.v.GetString("ts_image")
+func (c *ControllerConfig) GetTailscaleImage() string { return c.v.GetString("ts_image") }
+func (c *ControllerConfig) GetTailscaleOAuthClientID() string {
+	return c.v.GetString("ts_oauth_client_id")
+}
+func (c *ControllerConfig) GetTailscaleOAuthClientSecret() string {
+	return c.v.GetString("ts_oauth_client_secret")
+}
+func (c *ControllerConfig) GetTailscaleKeyDescription() string {
+	return c.v.GetString("ts_key_description")
 }
 
-// GetTailscaleTags returns comma-separated tags from env, defaulting to ["tag:gateway"].
-func (c *Config) GetTailscaleTags() []string {
+func (c *ControllerConfig) GetTailscaleTags() []string {
 	v := c.v.GetString("ts_tags")
 	if v == "" {
 		return []string{"tag:gateway"}
@@ -81,19 +79,4 @@ func (c *Config) GetTailscaleTags() []string {
 		return []string{"tag:gateway"}
 	}
 	return tags
-}
-
-// GetTailscaleOAuthClientID returns the OAuth client ID used for Tailscale API access.
-func (c *Config) GetTailscaleOAuthClientID() string {
-	return c.v.GetString("ts_oauth_client_id")
-}
-
-// GetTailscaleOAuthClientSecret returns the OAuth client secret used for Tailscale API access.
-func (c *Config) GetTailscaleOAuthClientSecret() string {
-	return c.v.GetString("ts_oauth_client_secret")
-}
-
-// GetTailscaleKeyDescription returns the description assigned to generated Tailscale auth keys.
-func (c *Config) GetTailscaleKeyDescription() string {
-	return c.v.GetString("ts_key_description")
 }

@@ -7,20 +7,26 @@ import (
 	"fmt"
 
 	"tailscale.com/client/tailscale/v2"
-
-	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 )
 
 // TailscaleClient wraps the Tailscale API client and configuration to perform
 // auth key creation and device management operations.
 type TailscaleClient struct {
 	c   *tailscale.Client
-	cfg *config.Config
+	cfg interface {
+		GetTailscaleOAuthClientID() string
+		GetTailscaleOAuthClientSecret() string
+		GetTailscaleKeyDescription() string
+	}
 }
 
 // New creates a TailscaleClient using OAuth credentials from the provided Config.
 // It returns an error if required OAuth configuration is missing.
-func New(cfg *config.Config) (*TailscaleClient, error) {
+func New(cfg interface {
+	GetTailscaleOAuthClientID() string
+	GetTailscaleOAuthClientSecret() string
+	GetTailscaleKeyDescription() string
+}) (*TailscaleClient, error) {
 	clientID := cfg.GetTailscaleOAuthClientID()
 	clientSecret := cfg.GetTailscaleOAuthClientSecret()
 	if clientID == "" || clientSecret == "" {

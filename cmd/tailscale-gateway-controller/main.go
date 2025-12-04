@@ -37,7 +37,7 @@ func init() {
 func main() {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
-	cfg, err := config.New()
+	cfg, err := config.NewControllerConfig()
 	if err != nil {
 		setupLog.Error(err, "unable to init config")
 		os.Exit(1)

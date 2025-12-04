@@ -167,12 +167,23 @@ func DaemonSetApply(
 										).
 										WithSecurityContext(applycorev1.SecurityContext().WithCapabilities(applycorev1.Capabilities().WithAdd(corev1.Capability("NET_ADMIN")))).
 										WithLifecycle(applycorev1.Lifecycle().WithPostStart(applycorev1.LifecycleHandler().WithExec(applycorev1.ExecAction().WithCommand(o.postStartCmd...))).WithPreStop(applycorev1.LifecycleHandler().WithExec(applycorev1.ExecAction().WithCommand(o.preStopCmd...)))).
-										WithVolumeMounts(applycorev1.VolumeMount().WithName("tailscale").WithMountPath("/etc/tailscaled/services.hujson").WithSubPath("services.hujson")),
+										WithVolumeMounts(
+											applycorev1.VolumeMount().
+												WithName("tailscale").
+												WithMountPath("/etc/tailscaled/services.hujson").
+												WithSubPath("services.hujson"),
+											applycorev1.VolumeMount().
+												WithName("state").
+												WithMountPath("/var/lib/tailscale"),
+										),
 								).
 								WithVolumes(
 									applycorev1.Volume().
 										WithName("tailscale").
 										WithConfigMap(applycorev1.ConfigMapVolumeSource().WithName(gw.Name).WithItems(applycorev1.KeyToPath().WithKey("services.hujson").WithPath("services.hujson"))),
+									applycorev1.Volume().
+										WithName("state").
+										WithEmptyDir(applycorev1.EmptyDirVolumeSource()),
 								),
 						),
 				),

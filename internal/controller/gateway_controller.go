@@ -32,7 +32,7 @@ type GatewayReconciler struct {
 	Kube    kubernetes.Interface
 	Gateway gateway.Interface
 	Scheme  *runtime.Scheme
-	Cfg     *config.Config
+	Cfg     *config.ControllerConfig
 }
 
 const (
@@ -48,7 +48,7 @@ func NewGatewayReconciler(
 	kube kubernetes.Interface,
 	gw gateway.Interface,
 	scheme *runtime.Scheme,
-	cfg *config.Config,
+	cfg *config.ControllerConfig,
 ) *GatewayReconciler {
 	return &GatewayReconciler{
 		Kube:    kube,
@@ -211,7 +211,7 @@ func (r *GatewayReconciler) reconcileResources(
 		return ctrl.Result{}, fmt.Errorf("failed to list HTTPRoutes: %w", err)
 	}
 
-	cfg, err := tsconfig.NewConfig(
+	cfg, err := tsconfig.NewControllerConfigConfig(
 		gw,
 		tsconfig.WithHTTPRoutes(hrs),
 	)

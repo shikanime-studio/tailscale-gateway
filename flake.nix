@@ -145,7 +145,9 @@
                 };
               };
             };
+
             languages.go.enable = true;
+
             packages = [
               pkgs.ko
               pkgs.kubectl
@@ -154,17 +156,32 @@
             ];
           };
 
-          packages.default = pkgs.buildGoModule {
-            pname = "tailscale-gateway";
-            version = "v0.1.0";
-            src = pkgs.lib.cleanSource ./.;
-            subPackages = [ "cmd/tailscale-gateway-controller" ];
-            vendorHash = "sha256-TrzjYQJMZxW907rpoRMmtJgTIbUC/OMNJzXXlQjcPb4=";
-            meta = with pkgs.lib; {
-              description = "Tailscale Gateway";
-              homepage = "https://github.com/shikanime-studio/tailscale-gateway";
-              license = licenses.asl20;
-              mainProgram = "tailscale-gateway-controller";
+          packages = {
+            controller = pkgs.buildGoModule {
+              pname = "tailscale-gateway";
+              version = "v0.1.0";
+              src = pkgs.lib.cleanSource ./.;
+              subPackages = [ "cmd/tailscale-gateway-controller" ];
+              vendorHash = "sha256-TrzjYQJMZxW907rpoRMmtJgTIbUC/OMNJzXXlQjcPb4=";
+              meta = with pkgs.lib; {
+                description = "Tailscale Gateway";
+                homepage = "https://github.com/shikanime-studio/tailscale-gateway";
+                license = licenses.asl20;
+                mainProgram = "tailscale-gateway-controller";
+              };
+            };
+            proxy = pkgs.buildGoModule {
+              pname = "tailscale-gateway";
+              version = "v0.1.0";
+              src = pkgs.lib.cleanSource ./.;
+              subPackages = [ "cmd/tailscale-gateway-proxy" ];
+              vendorHash = "sha256-TrzjYQJMZxW907rpoRMmtJgTIbUC/OMNJzXXlQjcPb4=";
+              meta = with pkgs.lib; {
+                description = "Tailscale Gateway";
+                homepage = "https://github.com/shikanime-studio/tailscale-gateway";
+                license = licenses.asl20;
+                mainProgram = "tailscale-gateway-proxy";
+              };
             };
           };
         };
