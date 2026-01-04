@@ -2,32 +2,31 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
-    - id: createGithubAppToken
-      uses: actions/create-github-app-token@v2
-      with:
-        app-id: ${{ vars.OPERATOR_APP_ID }}
-        private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-        token: ${{ steps.createGithubAppToken.outputs.token }}
-    - env:
-        BASE_REF: ${{ github.base_ref }}
-        GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
-        HEAD_REF: ${{ github.head_ref }}
-        REPO: ${{ github.repository }}
-      if: '!(startsWith(github.head_ref, ''gh/'') && endsWith(github.head_ref, ''/head''))'
-      run: git push origin --delete "$HEAD_REF" || true
-    - env:
-        BASE_REF: ${{ github.base_ref }}
-        GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
-        HEAD_REF: ${{ github.head_ref }}
-        REPO: ${{ github.repository }}
-      if: startsWith(github.head_ref, 'gh/') && endsWith(github.head_ref, '/head')
-      run: "for role in base head orig; do\n  git push origin --delete \"${HEAD_REF%/head}/$role\"\
-        \ || true\ndone\n"
+      - id: createGithubAppToken
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.OPERATOR_APP_ID }}
+          private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.createGithubAppToken.outputs.token }}
+      - env:
+          BASE_REF: ${{ github.base_ref }}
+          GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
+          HEAD_REF: ${{ github.head_ref }}
+          REPO: ${{ github.repository }}
+        if: '!(startsWith(github.head_ref, ''gh/'') && endsWith(github.head_ref, ''/head''))'
+        run: git push origin --delete "$HEAD_REF" || true
+      - env:
+          BASE_REF: ${{ github.base_ref }}
+          GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
+          HEAD_REF: ${{ github.head_ref }}
+          REPO: ${{ github.repository }}
+        if: startsWith(github.head_ref, 'gh/') && endsWith(github.head_ref, '/head')
+        run: "for role in base head orig; do\n  git push origin --delete \"${HEAD_REF%/head}/$role\" || true\ndone\n"
 name: Cleanup
 'on':
   pull_request:
     types:
-    - closed
+      - closed
