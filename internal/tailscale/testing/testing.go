@@ -27,7 +27,7 @@ func New(src rand.Source) *Client {
 }
 
 // CreateAuthKey simulates creating an auth key.
-func (c *Client) CreateAuthKey(ctx context.Context, tags []string) (string, error) {
+func (c *Client) CreateAuthKey(_ context.Context, tags []string) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -38,7 +38,7 @@ func (c *Client) CreateAuthKey(ctx context.Context, tags []string) (string, erro
 }
 
 // DeleteDevice simulates deleting a device.
-func (c *Client) DeleteDevice(ctx context.Context, id string) error {
+func (c *Client) DeleteDevice(_ context.Context, id string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
