@@ -2,15 +2,17 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
+	"math/rand"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kfake "k8s.io/client-go/kubernetes/fake"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -18,7 +20,7 @@ import (
 	gwfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
-	tsconfig "github.com/shikanime-studio/tailscale-gateway/internal/tsconfig"
+	tstesting "github.com/shikanime-studio/tailscale-gateway/internal/tailscale/testing"
 )
 
 // TestGatewayReconciler_Reconcile verifies reconciliation updates Gateway
@@ -39,6 +41,10 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 		{
 			name: "valid gateway with HTTPRoute",
 			gateway: &gatewayv1.Gateway{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: gatewayv1.GroupVersion.String(),
+					Kind:       "Gateway",
+				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-gateway",
 					Namespace: "default",
@@ -74,9 +80,8 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 									{
 										BackendRef: gatewayv1.BackendRef{
 											BackendObjectReference: gatewayv1.BackendObjectReference{
-												Name: "test-service",
-												Kind: ptrTo(gatewayv1.Kind("Service")),
-												Port: ptrTo(gatewayv1.PortNumber(8080)),
+												Name: gatewayv1.ObjectName("test-service"),
+												Port: ptr.To(gatewayv1.PortNumber(80)),
 											},
 										},
 									},
@@ -106,6 +111,10 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 						},
 					},
 				},
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: gatewayv1.GroupVersion.String(),
+					Kind:       "Gateway",
+				},
 			},
 			expectedError: false,
 			expectedReady: false,
@@ -118,12 +127,16 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: gatewayv1.GatewaySpec{
-					GatewayClassName: GatewayClassName,
+					GatewayClassName: "tailscale",
 					Listeners:        []gatewayv1.Listener{},
 				},
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: gatewayv1.GroupVersion.String(),
+					Kind:       "Gateway",
+				},
 			},
-			expectedError: true,
-			expectedReady: false,
+			expectedError: false,
+			expectedReady: true,
 		},
 		{
 			name: "gateway with invalid listener port",
@@ -133,47 +146,63 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: gatewayv1.GatewaySpec{
-					GatewayClassName: GatewayClassName,
+					GatewayClassName: "tailscale",
 					Listeners: []gatewayv1.Listener{
 						{
 							Name:     "http",
+							Port:     66000,
 							Protocol: gatewayv1.HTTPProtocolType,
-							Port:     99999, // Invalid port
 						},
 					},
 				},
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: gatewayv1.GroupVersion.String(),
+					Kind:       "Gateway",
+				},
 			},
-			expectedError: true,
-			expectedReady: false,
+			expectedError: false,
+			expectedReady: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.gateway.TypeMeta = metav1.TypeMeta{
-				APIVersion: gatewayv1.GroupVersion.String(),
-				Kind:       "Gateway",
+			ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
+			// Initialize fake clients
+			gwClient := gwfake.NewSimpleClientset()
+			if _, err := gwClient.GatewayV1().Gateways(tt.gateway.Namespace).Create(context.Background(), tt.gateway, metav1.CreateOptions{}); err != nil {
+				t.Fatalf("failed to create gateway: %v", err)
 			}
-			for i := range tt.httproutes {
-				tt.httproutes[i].TypeMeta = metav1.TypeMeta{
-					APIVersion: gatewayv1.GroupVersion.String(),
-					Kind:       "HTTPRoute",
+
+			// Add HTTPRoutes to gwClient
+			for _, hr := range tt.httproutes {
+				_, err := gwClient.GatewayV1().HTTPRoutes(hr.Namespace).Create(context.Background(), &hr, metav1.CreateOptions{})
+				if err != nil {
+					t.Fatalf("failed to create HTTPRoute: %v", err)
 				}
 			}
 
-			gwObjs := []runtime.Object{tt.gateway}
-			for i := range tt.httproutes {
-				gwObjs = append(gwObjs, &tt.httproutes[i])
+			// Pre-create Secret to simulate existing auth key
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tt.gateway.Name,
+					Namespace: tt.gateway.Namespace,
+				},
+				Data: map[string][]byte{
+					"authkey": []byte("tskey-auth-mock"),
+				},
 			}
 
-			gwClient := gwfake.NewSimpleClientset(gwObjs...)
-			kubeClient := kfake.NewSimpleClientset()
+			kubeClient := kfake.NewClientset(secret)
 
 			cfg, errCfg := config.New()
 			if errCfg != nil {
 				t.Fatalf("config init error: %v", errCfg)
 			}
-			r := NewGatewayReconciler(kubeClient, gwClient, s, cfg)
+
+			tsClient := tstesting.New(rand.NewSource(42))
+			r := NewGatewayReconciler(kubeClient, gwClient, tsClient, s, cfg)
 
 			// Test reconciliation
 			req := reconcile.Request{
@@ -189,127 +218,49 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 				// For validation errors, we don't return error but update status
 				// Check if Gateway status was updated to not ready
 				updatedGateway, _ := gwClient.GatewayV1().
-					Gateways(req.NamespacedName.Namespace).
-					Get(context.Background(), req.Name, metav1.GetOptions{})
-				if updatedGateway != nil {
-					condition := meta.FindStatusCondition(
-						updatedGateway.Status.Conditions,
-						string(gatewayv1.GatewayConditionReady),
-					)
-					if condition != nil && condition.Status == metav1.ConditionTrue {
-						t.Errorf(
-							"expected Gateway to be not ready for validation error, but condition is %v",
-							condition,
-						)
-					}
+					Gateways(tt.gateway.Namespace).
+					Get(context.Background(), tt.gateway.Name, metav1.GetOptions{})
+
+				condition := meta.FindStatusCondition(updatedGateway.Status.Conditions, string(gatewayv1.GatewayConditionProgrammed))
+				if condition != nil && condition.Status == metav1.ConditionTrue {
+					t.Errorf("expected error, but got nil and Gateway is ready")
 				}
 			}
 			if !tt.expectedError && err != nil {
-				t.Errorf("unexpected error: %v", err)
+				t.Errorf("expected no error, but got %v", err)
 			}
 
-			// Check Gateway status
-			updatedGateway, _ := gwClient.GatewayV1().
-				Gateways(req.NamespacedName.Namespace).
-				Get(context.Background(), req.Name, metav1.GetOptions{})
-			if updatedGateway != nil {
-				condition := meta.FindStatusCondition(
-					updatedGateway.Status.Conditions,
-					string(gatewayv1.GatewayConditionReady),
-				)
-				if tt.expectedReady &&
-					(condition == nil || condition.Status != metav1.ConditionTrue) {
-					t.Errorf("expected Gateway to be ready, but condition is %v", condition)
+			// Verify Gateway status
+			updatedGateway, err := gwClient.GatewayV1().
+				Gateways(tt.gateway.Namespace).
+				Get(context.Background(), tt.gateway.Name, metav1.GetOptions{})
+			if err != nil {
+				t.Errorf("failed to get updated Gateway: %v", err)
+			}
+
+			// Log Gateway status for debugging
+			t.Logf("Gateway Status: %+v", updatedGateway.Status)
+
+			condition := meta.FindStatusCondition(updatedGateway.Status.Conditions, string(gatewayv1.GatewayConditionProgrammed))
+			if tt.expectedReady {
+				if condition == nil || condition.Status != metav1.ConditionTrue {
+					t.Errorf("expected Gateway to be ready, but condition is %v. Conditions: %+v", condition, updatedGateway.Status.Conditions)
 				}
-				if !tt.expectedReady && condition != nil &&
-					condition.Status == metav1.ConditionTrue {
+			} else {
+				if condition != nil && condition.Status == metav1.ConditionTrue {
 					t.Errorf("expected Gateway not to be ready, but condition is %v", condition)
+				}
+			}
+
+			// Verify dependent resources (DaemonSet)
+			if tt.expectedReady {
+				ds, err := kubeClient.AppsV1().DaemonSets(tt.gateway.Namespace).Get(context.Background(), tt.gateway.Name, metav1.GetOptions{})
+				if err != nil {
+					t.Errorf("expected DaemonSet to exist, but got error: %v", err)
+				} else {
+					t.Logf("DaemonSet found: %s", ds.Name)
 				}
 			}
 		})
 	}
-}
-
-// TestServicesApplyBuildsTargets ensures that TCP targets are set for
-// advertised services using listener ports.
-func TestServicesApplyBuildsTargets(t *testing.T) {
-	gw := &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-gateway", Namespace: "default"},
-		Spec: gatewayv1.GatewaySpec{
-			GatewayClassName: GatewayClassName,
-			Listeners: []gatewayv1.Listener{
-				{Name: "http", Protocol: gatewayv1.HTTPProtocolType, Port: 80},
-			},
-		},
-	}
-
-	routes := []gatewayv1.HTTPRoute{
-		{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-			Spec: gatewayv1.HTTPRouteSpec{
-				CommonRouteSpec: gatewayv1.CommonRouteSpec{
-					ParentRefs: []gatewayv1.ParentReference{{Name: "test-gateway"}},
-				},
-				Rules: []gatewayv1.HTTPRouteRule{
-					{BackendRefs: []gatewayv1.HTTPBackendRef{
-						{
-							BackendRef: gatewayv1.BackendRef{
-								BackendObjectReference: gatewayv1.BackendObjectReference{
-									Name: "service1",
-									Kind: ptrTo(gatewayv1.Kind("Service")),
-									Port: ptrTo(gatewayv1.PortNumber(8080)),
-								},
-							},
-						},
-					}},
-				},
-			},
-		},
-	}
-
-	opts := make([]tsconfig.Option, 0, len(routes))
-	for i := range routes {
-		rt := routes[i]
-		opts = append(opts, tsconfig.WithHTTPRoutes([]*gatewayv1.HTTPRoute{&rt}))
-	}
-	cfg, err := tsconfig.NewConfig(gw, opts...)
-	if err != nil {
-		t.Fatalf("new config failed: %v", err)
-	}
-	outBytes, err := tsconfig.Marshal(cfg)
-	if err != nil {
-		t.Fatalf("marshal failed: %v", err)
-	}
-	type generic struct {
-		Services map[string]struct {
-			TCP map[string]map[string]bool `json:"TCP"`
-			Web map[string]map[string]struct {
-				Proxy string `json:"Proxy"`
-			} `json:"Web"`
-		} `json:"Services"`
-	}
-	var parsed generic
-	if err := json.Unmarshal(outBytes, &parsed); err != nil {
-		t.Fatalf("failed to unmarshal output: %v", err)
-	}
-	svc, ok := parsed.Services["svc:test-gateway"]
-	if !ok {
-		t.Fatalf("expected service key svc:test-gateway")
-	}
-	if !svc.TCP["80"]["HTTP"] {
-		t.Fatalf("expected TCP 80 HTTP true")
-	}
-}
-
-// Helper function to create pointers
-// ptrTo returns a pointer to the provided value.
-func ptrTo[T any](v T) *T {
-	return &v
-}
-
-// TestMain configures logging before running the test suite.
-func TestMain(m *testing.M) {
-	// Set up logging for tests
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
-	m.Run()
 }

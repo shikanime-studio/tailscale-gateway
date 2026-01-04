@@ -1,0 +1,21 @@
+// Package config builds and encodes Tailscale serve configurations.
+package config
+
+import (
+	"encoding/json"
+
+	"github.com/tailscale/hujson"
+)
+
+// Marshal serializes the Config to HUJSON-formatted Tailscale serve config bytes.
+func Marshal(cfg *Config) ([]byte, error) {
+	b, err := json.Marshal(cfg.cfg)
+	if err != nil {
+		return nil, err
+	}
+	fb, err := hujson.Format(b)
+	if err != nil {
+		return nil, err
+	}
+	return fb, nil
+}

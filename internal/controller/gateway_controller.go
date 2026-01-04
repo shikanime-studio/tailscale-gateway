@@ -23,16 +23,17 @@ import (
 	"github.com/shikanime-studio/tailscale-gateway/internal/applyconfig"
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	"github.com/shikanime-studio/tailscale-gateway/internal/reconcilerutil"
-	"github.com/shikanime-studio/tailscale-gateway/internal/tsclient"
-	"github.com/shikanime-studio/tailscale-gateway/internal/tsconfig"
+	"github.com/shikanime-studio/tailscale-gateway/internal/tailscale"
+	tsconfig "github.com/shikanime-studio/tailscale-gateway/internal/tailscale/config"
 )
 
 // GatewayReconciler reconciles a Gateway object.
 type GatewayReconciler struct {
-	Kube    kubernetes.Interface
-	Gateway gateway.Interface
-	Scheme  *runtime.Scheme
-	Cfg     *config.Config
+	Kube      kubernetes.Interface
+	Gateway   gateway.Interface
+	Tailscale tailscale.Interface
+	Scheme    *runtime.Scheme
+	Cfg       *config.Config
 }
 
 const (
@@ -47,14 +48,16 @@ const (
 func NewGatewayReconciler(
 	kube kubernetes.Interface,
 	gw gateway.Interface,
+	ts tailscale.Interface,
 	scheme *runtime.Scheme,
 	cfg *config.Config,
 ) *GatewayReconciler {
 	return &GatewayReconciler{
-		Kube:    kube,
-		Gateway: gw,
-		Scheme:  scheme,
-		Cfg:     cfg,
+		Kube:      kube,
+		Gateway:   gw,
+		Scheme:    scheme,
+		Cfg:       cfg,
+		Tailscale: ts,
 	}
 }
 
@@ -68,10 +71,10 @@ func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
 	// Fetch the Gateway instance, requeue if we encounter an error
-	gateway, err := r.Gateway.GatewayV1().
+	gw, err := r.Gateway.GatewayV1().
 		Gateways(req.Namespace).
 		Get(ctx, req.Name, metav1.GetOptions{})
 	if err != nil {
@@ -82,14 +85,14 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Check if the Gateway is managed by this controller
-	if gateway.Spec.GatewayClassName != GatewayClassName {
+	if gw.Spec.GatewayClassName != GatewayClassName {
 		return ctrl.Result{}, nil
 	}
 
 	// examine DeletionTimestamp to determine if object is under deletion
-	if !gateway.DeletionTimestamp.IsZero() {
+	if !gw.DeletionTimestamp.IsZero() {
 		// The object is being deleted
-		if err = r.finalizeGateway(ctx, gateway); err != nil {
+		if err = r.finalizeGateway(ctx, gw); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to finalize gateway: %w", err)
 		}
 		return ctrl.Result{}, nil
@@ -98,20 +101,20 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// The object is not being deleted, so if it does not have our finalizer,
 	// then let's add the finalizer and update the object. This is equivalent
 	// to registering our finalizer.
-	if err := r.updateGatewayFinalizer(ctx, gateway); err != nil {
+	if err = r.updateGatewayFinalizer(ctx, gw); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update gateway finalizer: %w", err)
 	}
 
 	// Reconcile the resources for the Gateway
-	resourcesRes, err := r.reconcileResources(ctx, gateway)
+	resourcesRes, err := r.reconcileResources(ctx, gw)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to manage proxy servers: %w", err)
 	}
 
-	log.Info(
+	logger.Info(
 		"Gateway reconciled successfully",
 		"hostname",
-		fmt.Sprintf("%s-%s", gateway.Namespace, gateway.Name),
+		fmt.Sprintf("%s-%s", gw.Namespace, gw.Name),
 	)
 
 	return resourcesRes, nil
@@ -142,10 +145,6 @@ func (r *GatewayReconciler) finalizeGateway(
 	if controllerutil.ContainsFinalizer(gw, FinalizerTailscale) {
 		// our finalizer is present, so let's handle any external dependency
 
-		tsClient, err := tsclient.New(r.Cfg)
-		if err != nil {
-			return fmt.Errorf("failed to init tailscale client: %w", err)
-		}
 		sec, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to get secret: %w", err)
@@ -154,7 +153,7 @@ func (r *GatewayReconciler) finalizeGateway(
 			if b, ok := sec.Data["device_id"]; ok {
 				devID := string(b)
 				if devID != "" {
-					if err = tsClient.DeleteDevice(ctx, devID); err != nil {
+					if err = r.Tailscale.DeleteDevice(ctx, devID); err != nil {
 						return fmt.Errorf("failed to delete device: %w", err)
 					}
 				}
@@ -204,7 +203,7 @@ func (r *GatewayReconciler) reconcileResources(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
 	hrs, err := r.listHTTPRoutesForGateway(ctx, gw)
 	if err != nil {
@@ -271,7 +270,7 @@ func (r *GatewayReconciler) reconcileResources(
 		return ctrl.Result{}, fmt.Errorf("failed to update gateway status: %w", err)
 	}
 
-	log.Info(
+	logger.Info(
 		"Gateway reconciled successfully",
 		"hostname",
 		fmt.Sprintf("%s-%s", gw.Namespace, gw.Name),
@@ -369,11 +368,7 @@ func (r *GatewayReconciler) reconcileSecret(
 func (r *GatewayReconciler) tailscaleConfigData(
 	ctx context.Context,
 ) (map[string]string, error) {
-	tsClient, err := tsclient.New(r.Cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize tailscale client: %w", err)
-	}
-	key, err := tsClient.CreateAuthKey(ctx, r.Cfg.GetTailscaleTags())
+	key, err := r.Tailscale.CreateAuthKey(ctx, r.Cfg.GetTailscaleTags())
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate tailscale auth key: %w", err)
 	}

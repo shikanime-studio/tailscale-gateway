@@ -1,5 +1,5 @@
 jobs:
-  update:
+  dependencies:
     runs-on: ubuntu-latest
     steps:
       - id: createGithubAppToken
@@ -7,7 +7,7 @@ jobs:
         with:
           app-id: ${{ vars.OPERATOR_APP_ID }}
           private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ steps.createGithubAppToken.outputs.token }}
@@ -22,8 +22,23 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           sign-commits: true
           username: Operator 6O <operator6o@shikanime.studio>
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - id: createGithubAppToken
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.OPERATOR_APP_ID }}
+          private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
+      - uses: actions/stale@v10
+        with:
+          days-before-close: 14
+          days-before-stale: 30
+          repo-token: ${{ steps.createGithubAppToken.outputs.token }}
+          stale-issue-label: stale
+          stale-pr-label: stale
 name: Update
-"on":
+'on':
   schedule:
-    - cron: 0 0 * * 0
+    - cron: 0 4 * * 0
   workflow_dispatch: null

@@ -92,7 +92,7 @@ from `TAILSCALE_TAGS` and default to `tag:gateway` when unset.
 - If the Secret contains `authkey`, it is left unchanged.
 - If missing, the controller generates a non-reusable, ephemeral, preauthorized
   auth key using the official Tailscale client
-  (`tailscale.com/client/tailscale/v2`).
+  (`tailscale.com/client/tailscale`).
 - Tags for the key are sourced from `TAILSCALE_TAGS`.
 
 ## References

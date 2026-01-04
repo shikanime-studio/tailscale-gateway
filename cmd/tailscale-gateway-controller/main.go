@@ -19,6 +19,7 @@ import (
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	"github.com/shikanime-studio/tailscale-gateway/internal/controller"
+	"github.com/shikanime-studio/tailscale-gateway/internal/tailscale"
 )
 
 var (
@@ -68,7 +69,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	reconciler := controller.NewGatewayReconciler(kubeClient, gwClient, mgr.GetScheme(), cfg)
+	tsClient, err := tailscale.New(cfg)
+	if err != nil {
+		setupLog.Error(err, "unable to create tailscale client")
+		os.Exit(1)
+	}
+
+	reconciler := controller.NewGatewayReconciler(kubeClient, gwClient, tsClient, mgr.GetScheme(), cfg)
 	if err = reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Gateway")
 		os.Exit(1)

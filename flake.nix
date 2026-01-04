@@ -1,5 +1,6 @@
 {
   inputs = {
+    automata.url = "github:shikanime-studio/automata";
     devenv.url = "github:cachix/devenv";
     devlib.url = "github:shikanime-studio/devlib";
     flake-parts.url = "github:hercules-ci/flake-parts";
@@ -40,10 +41,20 @@
         treefmt-nix.flakeModule
       ];
       perSystem =
-        { config, pkgs, ... }:
+        {
+          config,
+          pkgs,
+          ...
+        }:
         {
           devenv.shells.default = {
             imports = [
+              devlib.devenvModules.docs
+              devlib.devenvModules.formats
+              devlib.devenvModules.github
+              devlib.devenvModules.go
+              devlib.devenvModules.nix
+              devlib.devenvModules.shell
               devlib.devenvModules.shikanime-studio
             ];
             github = {
@@ -53,33 +64,29 @@
                   "with".name = "deploy";
                 };
 
-                skaffold-build = {
-                  run = mkWorkflowRun [
-                    "nix"
-                    "shell"
-                    "nixpkgs#ko"
-                    "nixpkgs#skaffold"
-                    "--command"
-                    "skaffold"
-                    "build"
-                    "--platform"
-                    "linux/amd64,linux/arm64"
-                  ];
-                };
+                skaffold-build.run = mkWorkflowRun [
+                  "nix"
+                  "shell"
+                  "nixpkgs#ko"
+                  "nixpkgs#skaffold"
+                  "--command"
+                  "skaffold"
+                  "build"
+                  "--platform"
+                  "linux/amd64,linux/arm64"
+                ];
 
-                skaffold-render = {
-                  run = mkWorkflowRun [
-                    "nix"
-                    "shell"
-                    "nixpkgs#ko"
-                    "nixpkgs#skaffold"
-                    "--command"
-                    "skaffold"
-                    "render"
-                    "--output"
-                    "tailscale-gateway.yaml"
-                  ];
-                };
+                skaffold-render.run = mkWorkflowRun [
+                  "nix"
+                  "shell"
+                  "nixpkgs#ko"
+                  "nixpkgs#skaffold"
+                  "--command"
+                  "skaffold"
+                  "render"
+                  "--output"
+                  "tailscale-gateway.yaml"
+                ];
 
                 upload-deploy-artifacts = {
                   uses = "actions/upload-artifact@v5";
@@ -102,21 +109,20 @@
                   ];
                 };
               };
+
               workflows = with config.devenv.shells.default.github.lib; {
-                main.settings.jobs = {
-                  build = {
-                    needs = [ "check" ];
-                    permissions.packages = "write";
-                    "runs-on" = "ubuntu-latest";
-                    steps = with config.devenv.shells.default.github.actions; [
-                      create-github-app-token
-                      checkout
-                      setup-nix
-                      docker-login
-                      skaffold-build
-                    ];
-                  };
+                push.settings.jobs.build = {
+                  permissions.packages = "write";
+                  "runs-on" = "ubuntu-latest";
+                  steps = with config.devenv.shells.default.github.actions; [
+                    create-github-app-token
+                    checkout
+                    setup-nix
+                    docker-login
+                    skaffold-build
+                  ];
                 };
+
                 release.settings.jobs = {
                   build = {
                     needs = [ "publish" ];
@@ -131,6 +137,7 @@
                       upload-deploy-artifacts
                     ];
                   };
+
                   upload = {
                     permissions.packages = "write";
                     needs = [ "build" ];
@@ -145,13 +152,29 @@
                 };
               };
             };
-            languages.go.enable = true;
+
             packages = [
               pkgs.ko
               pkgs.kubectl
               pkgs.skaffold
-              pkgs.sops
             ];
+
+            sops = {
+              enable = true;
+              settings.creation_rules = [
+                {
+                  key_groups = [
+                    {
+                      age = [
+                        "age139fcg32lmhxupnz5wjex44jur7v7wzf9rttp2grnjmxhukck5dmqsd9zj5" # kaltashar
+                        "age1pwl9yz4k4255a4h8qz7lafce8wxhsul0cnqwmr8528fqgujlfshshv3z3g" # telsha
+                        "age1x9v4ps90txy9mk4392uya93tyzx40te4dvns4chg5s6q8mfy03ns74jpay" # nixtar
+                      ];
+                    }
+                  ];
+                }
+              ];
+            };
           };
 
           packages.default = pkgs.buildGoModule {
@@ -159,7 +182,7 @@
             version = "v0.1.0";
             src = pkgs.lib.cleanSource ./.;
             subPackages = [ "cmd/tailscale-gateway-controller" ];
-            vendorHash = "sha256-TrzjYQJMZxW907rpoRMmtJgTIbUC/OMNJzXXlQjcPb4=";
+            vendorHash = pkgs.lib.fakeHash;
             meta = with pkgs.lib; {
               description = "Tailscale Gateway";
               homepage = "https://github.com/shikanime-studio/tailscale-gateway";
