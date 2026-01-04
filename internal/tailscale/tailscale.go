@@ -5,8 +5,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	ts "tailscale.com/client/tailscale/v2"
+
+	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 )
 
 // Interface defines the interface for Tailscale client operations.

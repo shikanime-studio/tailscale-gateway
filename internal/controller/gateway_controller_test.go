@@ -200,7 +200,7 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 				t.Fatalf("config init error: %v", errCfg)
 			}
 
-			tsClient := &fake.FakeClient{}
+			tsClient := &fake.Client{}
 			r := NewGatewayReconciler(kubeClient, gwClient, tsClient, s, cfg)
 
 			// Test reconciliation
