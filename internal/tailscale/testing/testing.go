@@ -8,6 +8,7 @@ import (
 	"sync"
 )
 
+// AuthKey represents an auth key in the fake Tailscale client.
 type AuthKey struct {
 	Tags []string
 }
