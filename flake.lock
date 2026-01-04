@@ -1011,11 +1011,11 @@
         "treefmt-nix": "treefmt-nix_13"
       },
       "locked": {
-        "lastModified": 1767482745,
-        "narHash": "sha256-bOE1eWeHkd/U6XLjlqwDhKca+HkD5QZ93XAMPexSSMk=",
+        "lastModified": 1767492291,
+        "narHash": "sha256-ce3IUUqsWsRBNHQ2nvfzsUcv+1CHjLaS+2AUHuaD8w8=",
         "owner": "shikanime-studio",
         "repo": "devlib",
-        "rev": "079f1a99499313a45700beef31abf6ae4fed0531",
+        "rev": "ee6a962eb5a9006105c6839679546e2a4fdfbb3c",
         "type": "github"
       },
       "original": {
