@@ -14,7 +14,6 @@ jobs:
       - uses: shikanime-studio/setup-nix-action@v1
         with:
           github-token: ${{ steps.createGithubAppToken.outputs.token }}
-      - run: nix fmt
       - uses: shikanime-studio/automata-action@v1
         with:
           ghstack-username: operator6o
@@ -39,7 +38,7 @@ jobs:
           stale-issue-label: stale
           stale-pr-label: stale
 name: Update
-"on":
+'on':
   schedule:
     - cron: 0 4 * * 0
   workflow_dispatch: null

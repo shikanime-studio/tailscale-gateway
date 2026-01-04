@@ -1,5 +1,5 @@
 jobs:
-  cleanup:
+  triage:
     runs-on: ubuntu-latest
     steps:
       - id: createGithubAppToken
@@ -12,21 +12,21 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.createGithubAppToken.outputs.token }}
       - env:
-          BASE_REF: ${{ github.base_ref }}
           GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
-          HEAD_REF: ${{ github.head_ref }}
-          REPO: ${{ github.repository }}
-        if: '!(startsWith(github.head_ref, ''gh/'') && endsWith(github.head_ref, ''/head''))'
-        run: git push origin --delete "$HEAD_REF" || true
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        if: github.event.pull_request.user.login == 'dependabot[bot]' || github.event.pull_request.user.login == 'yorha-operator-6o[bot]'
+        run: gh pr edit "$PR_NUMBER" --add-label dependencies
       - env:
-          BASE_REF: ${{ github.base_ref }}
           GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
-          HEAD_REF: ${{ github.head_ref }}
-          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         if: startsWith(github.head_ref, 'gh/') && endsWith(github.head_ref, '/head')
-        run: "for role in base head orig; do\n  git push origin --delete \"${HEAD_REF%/head}/$role\" || true\ndone\n"
-name: Cleanup
+        run: gh pr edit "$PR_NUMBER" --add-label ghstack
+name: Triage
 'on':
   pull_request:
+    branches:
+      - main
+      - gh/*/*/base
     types:
-      - closed
+      - opened
+      - reopened

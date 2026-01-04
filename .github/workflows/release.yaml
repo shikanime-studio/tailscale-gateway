@@ -22,12 +22,8 @@ jobs:
           DOCKER_REGISTRY: ghcr.io
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           USERNAME: ${{ github.actor }}
-        run:
-          nix run nixpkgs#docker -- login "$DOCKER_REGISTRY" --username "$USERNAME"
-          --password "$GITHUB_TOKEN"
-      - run:
-          nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold render --output
-          tailscale-gateway.yaml
+        run: nix run nixpkgs#docker -- login "$DOCKER_REGISTRY" --username "$USERNAME" --password "$GITHUB_TOKEN"
+      - run: nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold render --output tailscale-gateway.yaml
       - uses: actions/upload-artifact@v5
         with:
           name: deploy
@@ -88,11 +84,9 @@ jobs:
           name: deploy
       - env:
           GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
-        run:
-          gh release upload ${{ github.ref_name }} --repo ${{ github.repository }}
-          tailscale-gateway.yaml
+        run: gh release upload ${{ github.ref_name }} --repo ${{ github.repository }} tailscale-gateway.yaml
 name: Release
-"on":
+'on':
   push:
     tags:
       - v?[0-9]+.[0-9]+.[0-9]+*

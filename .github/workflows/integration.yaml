@@ -54,9 +54,7 @@ jobs:
       - env:
           GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        if:
-          github.event.pull_request.user.login == 'yorha-operator-6o[bot]' || github.event.pull_request.user.login
-          == 'dependabot[bot]'
+        if: github.event.pull_request.user.login == 'yorha-operator-6o[bot]' || github.event.pull_request.user.login == 'dependabot[bot]'
         run: gh pr edit "$PR_NUMBER" --add-label dependencies
       - env:
           GITHUB_TOKEN: ${{ steps.createGithubAppToken.outputs.token }}

@@ -20,12 +20,8 @@ jobs:
           DOCKER_REGISTRY: ghcr.io
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           USERNAME: ${{ github.actor }}
-        run:
-          nix run nixpkgs#docker -- login "$DOCKER_REGISTRY" --username "$USERNAME"
-          --password "$GITHUB_TOKEN"
-      - run:
-          nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold build --platform
-          linux/amd64,linux/arm64
+        run: nix run nixpkgs#docker -- login "$DOCKER_REGISTRY" --username "$USERNAME" --password "$GITHUB_TOKEN"
+      - run: nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold build --platform linux/amd64,linux/arm64
   check:
     runs-on: ubuntu-latest
     steps:

@@ -49,6 +49,13 @@
         {
           devenv.shells.default = {
             imports = [
+              devlib.devenvModules.docs
+              devlib.devenvModules.formats
+              devlib.devenvModules.github
+              devlib.devenvModules.go
+              devlib.devenvModules.nix
+              devlib.devenvModules.opentofu
+              devlib.devenvModules.shell
               devlib.devenvModules.shikanime-studio
             ];
             github = {
@@ -146,8 +153,6 @@
                 };
               };
             };
-
-            languages.go.enable = true;
 
             packages = [
               pkgs.ko

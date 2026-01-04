@@ -1,5 +1,5 @@
 jobs:
-  land:
+  check:
     runs-on: ubuntu-latest
     steps:
       - id: createGithubAppToken
@@ -14,15 +14,14 @@ jobs:
       - uses: shikanime-studio/setup-nix-action@v1
         with:
           github-token: ${{ steps.createGithubAppToken.outputs.token }}
-      - uses: shikanime-studio/sapling-action@v6
-        with:
-          github-token: ${{ steps.createGithubAppToken.outputs.token }}
-          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          sign-commits: true
-          username: Operator 6O <operator6o@shikanime.studio>
-name: Land
+      - run: nix flake check --accept-flake-config --all-systems --no-pure-eval
+name: Check
 'on':
-  issue_comment:
-    types:
-      - created
+  pull_request:
+    branches:
+      - main
+      - gh/*/*/base
+  push:
+    branches:
+      - main
+      - release-*
