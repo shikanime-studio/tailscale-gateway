@@ -8,10 +8,14 @@ import (
 	"sync"
 )
 
+type AuthKey struct {
+	Tags []string
+}
+
 // Client is a fake implementation of tailscale.Interface for testing.
 type Client struct {
 	mu             sync.Mutex
-	AuthKeys       map[string]struct{}
+	AuthKeys       map[string]AuthKey
 	DeletedDevices map[string]struct{}
 
 	rng *rand.Rand
@@ -20,7 +24,7 @@ type Client struct {
 // New creates a new fake Client with the given random source.
 func New(src rand.Source) *Client {
 	return &Client{
-		AuthKeys:       make(map[string]struct{}),
+		AuthKeys:       make(map[string]AuthKey),
 		DeletedDevices: make(map[string]struct{}),
 		rng:            rand.New(src),
 	}
@@ -33,7 +37,9 @@ func (c *Client) CreateAuthKey(_ context.Context, tags []string) (string, error)
 
 	// Generate a random key
 	key := fmt.Sprintf("tskey-auth-%d", c.rng.Int63())
-	c.AuthKeys[key] = struct{}{}
+	c.AuthKeys[key] = AuthKey{
+		Tags: tags,
+	}
 	return key, nil
 }
 
