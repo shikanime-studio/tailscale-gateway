@@ -1,5 +1,5 @@
-// Package tsconfig builds and encodes Tailscale serve configurations.
-package tsconfig
+// Package config builds and encodes Tailscale serve configurations.
+package config
 
 import (
 	"encoding/json"

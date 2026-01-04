@@ -1,4 +1,4 @@
-package tsconfig
+package config
 
 import (
 	"fmt"

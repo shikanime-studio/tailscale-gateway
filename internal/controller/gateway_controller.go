@@ -23,16 +23,17 @@ import (
 	"github.com/shikanime-studio/tailscale-gateway/internal/applyconfig"
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
 	"github.com/shikanime-studio/tailscale-gateway/internal/reconcilerutil"
-	"github.com/shikanime-studio/tailscale-gateway/internal/tsclient"
-	"github.com/shikanime-studio/tailscale-gateway/internal/tsconfig"
+	"github.com/shikanime-studio/tailscale-gateway/internal/tailscale"
+	tsconfig "github.com/shikanime-studio/tailscale-gateway/internal/tailscale/config"
 )
 
 // GatewayReconciler reconciles a Gateway object.
 type GatewayReconciler struct {
-	Kube    kubernetes.Interface
-	Gateway gateway.Interface
-	Scheme  *runtime.Scheme
-	Cfg     *config.Config
+	Kube      kubernetes.Interface
+	Gateway   gateway.Interface
+	Tailscale tailscale.Interface
+	Scheme    *runtime.Scheme
+	Cfg       *config.Config
 }
 
 const (
@@ -47,14 +48,16 @@ const (
 func NewGatewayReconciler(
 	kube kubernetes.Interface,
 	gw gateway.Interface,
+	ts tailscale.Interface,
 	scheme *runtime.Scheme,
 	cfg *config.Config,
 ) *GatewayReconciler {
 	return &GatewayReconciler{
-		Kube:    kube,
-		Gateway: gw,
-		Scheme:  scheme,
-		Cfg:     cfg,
+		Kube:      kube,
+		Gateway:   gw,
+		Scheme:    scheme,
+		Cfg:       cfg,
+		Tailscale: ts,
 	}
 }
 
@@ -98,7 +101,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// The object is not being deleted, so if it does not have our finalizer,
 	// then let's add the finalizer and update the object. This is equivalent
 	// to registering our finalizer.
-	if err := r.updateGatewayFinalizer(ctx, gateway); err != nil {
+	if err = r.updateGatewayFinalizer(ctx, gateway); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update gateway finalizer: %w", err)
 	}
 
@@ -142,10 +145,6 @@ func (r *GatewayReconciler) finalizeGateway(
 	if controllerutil.ContainsFinalizer(gw, FinalizerTailscale) {
 		// our finalizer is present, so let's handle any external dependency
 
-		tsClient, err := tsclient.New(r.Cfg)
-		if err != nil {
-			return fmt.Errorf("failed to init tailscale client: %w", err)
-		}
 		sec, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to get secret: %w", err)
@@ -154,7 +153,7 @@ func (r *GatewayReconciler) finalizeGateway(
 			if b, ok := sec.Data["device_id"]; ok {
 				devID := string(b)
 				if devID != "" {
-					if err = tsClient.DeleteDevice(ctx, devID); err != nil {
+					if err = r.Tailscale.DeleteDevice(ctx, devID); err != nil {
 						return fmt.Errorf("failed to delete device: %w", err)
 					}
 				}
@@ -369,11 +368,7 @@ func (r *GatewayReconciler) reconcileSecret(
 func (r *GatewayReconciler) tailscaleConfigData(
 	ctx context.Context,
 ) (map[string]string, error) {
-	tsClient, err := tsclient.New(r.Cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize tailscale client: %w", err)
-	}
-	key, err := tsClient.CreateAuthKey(ctx, r.Cfg.GetTailscaleTags())
+	key, err := r.Tailscale.CreateAuthKey(ctx, r.Cfg.GetTailscaleTags())
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate tailscale auth key: %w", err)
 	}
