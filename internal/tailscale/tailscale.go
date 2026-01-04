@@ -54,8 +54,7 @@ func (tc *Client) CreateAuthKey(ctx context.Context, tags []string) (string, err
 		Capabilities: caps,
 		Description:  desc,
 	}
-	key, err := tc.c.Keys().
-		Create(ctx, ref)
+	key, err := tc.c.Keys().CreateAuthKey(ctx, ref)
 	if err != nil {
 		return "", err
 	}
