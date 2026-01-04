@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -19,7 +20,7 @@ import (
 	gwfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
-	"github.com/shikanime-studio/tailscale-gateway/internal/tailscale/fake"
+	tstesting "github.com/shikanime-studio/tailscale-gateway/internal/tailscale/testing"
 )
 
 // TestGatewayReconciler_Reconcile verifies reconciliation updates Gateway
@@ -200,7 +201,7 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 				t.Fatalf("config init error: %v", errCfg)
 			}
 
-			tsClient := &fake.Client{}
+			tsClient := tstesting.New(rand.NewSource(42))
 			r := NewGatewayReconciler(kubeClient, gwClient, tsClient, s, cfg)
 
 			// Test reconciliation
