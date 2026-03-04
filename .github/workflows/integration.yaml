@@ -25,7 +25,7 @@ jobs:
         run: nix run nixpkgs#direnv allow
       - env: {}
         run: nix run nixpkgs#direnv export gha >> "$GITHUB_ENV"
-      - run: skaffold --command skaffold build --platform linux/amd64,linux/arm64
+      - run: skaffold build --platform linux/amd64,linux/arm64
   check:
     runs-on: ubuntu-latest
     steps:

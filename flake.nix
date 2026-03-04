@@ -91,7 +91,7 @@
                     run = "nix run nixpkgs#direnv export gha >> \"$GITHUB_ENV\"";
                   }
                   {
-                    run = "skaffold --command skaffold build --platform linux/amd64,linux/arm64";
+                    run = "skaffold build --platform linux/amd64,linux/arm64";
                   }
                 ];
               };
@@ -136,7 +136,7 @@
                       run = "nix run nixpkgs#direnv export gha >> \"$GITHUB_ENV\"";
                     }
                     {
-                      run = "skaffold --command skaffold render --output tailscale-gateway.yaml";
+                      run = "skaffold render --output tailscale-gateway.yaml";
                     }
                     {
                       uses = "actions/upload-artifact@v5";
