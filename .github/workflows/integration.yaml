@@ -21,7 +21,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           registry: ghcr.io
           username: ${{ github.actor }}
-      - run: nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold build --platform linux/amd64,linux/arm64
+      - env: {}
+        run: nix run nixpkgs#direnv allow
+      - env: {}
+        run: nix run nixpkgs#direnv export gha >> "$GITHUB_ENV"
+      - run: skaffold --command skaffold build --platform linux/amd64,linux/arm64
   check:
     runs-on: ubuntu-latest
     steps:

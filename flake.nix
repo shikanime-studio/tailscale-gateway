@@ -83,7 +83,15 @@
                     };
                   }
                   {
-                    run = "nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold build --platform linux/amd64,linux/arm64";
+                    env = { };
+                    run = "nix run nixpkgs#direnv allow";
+                  }
+                  {
+                    env = { };
+                    run = "nix run nixpkgs#direnv export gha >> \"$GITHUB_ENV\"";
+                  }
+                  {
+                    run = "skaffold --command skaffold build --platform linux/amd64,linux/arm64";
                   }
                 ];
               };
@@ -120,7 +128,15 @@
                       };
                     }
                     {
-                      run = "nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold render --output tailscale-gateway.yaml";
+                      env = { };
+                      run = "nix run nixpkgs#direnv allow";
+                    }
+                    {
+                      env = { };
+                      run = "nix run nixpkgs#direnv export gha >> \"$GITHUB_ENV\"";
+                    }
+                    {
+                      run = "skaffold --command skaffold render --output tailscale-gateway.yaml";
                     }
                     {
                       uses = "actions/upload-artifact@v5";
