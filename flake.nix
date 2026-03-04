@@ -41,114 +41,127 @@
         treefmt-nix.flakeModule
       ];
       perSystem =
-        {
-          config,
-          pkgs,
-          ...
-        }:
+        { pkgs, ... }:
         {
           devenv.shells.default = {
             imports = [
-              devlib.devenvModules.docs
-              devlib.devenvModules.formats
-              devlib.devenvModules.github
               devlib.devenvModules.go
               devlib.devenvModules.nix
               devlib.devenvModules.shell
               devlib.devenvModules.shikanime-studio
             ];
-            github = {
-              actions = with config.devenv.shells.default.github.lib; {
-                download-deploy-artifacts = {
-                  uses = "actions/download-artifact@v4";
-                  "with".name = "deploy";
-                };
 
-                skaffold-build.run = mkWorkflowRun [
-                  "nix"
-                  "shell"
-                  "nixpkgs#ko"
-                  "nixpkgs#skaffold"
-                  "--command"
-                  "skaffold"
-                  "build"
-                  "--platform"
-                  "linux/amd64,linux/arm64"
+            github.settings.workflows = {
+              integration.jobs.build = {
+                permissions.packages = "write";
+                "runs-on" = "ubuntu-latest";
+                steps = [
+                  {
+                    id = "createGithubAppToken";
+                    uses = "actions/create-github-app-token@v1";
+                    "with" = {
+                      app-id = "\${{ vars.OPERATOR_APP_ID }}";
+                      private-key = "\${{ secrets.OPERATOR_PRIVATE_KEY }}";
+                      permission-contents = "read";
+                    };
+                  }
+                  {
+                    uses = "actions/checkout@v4";
+                    "with".token = "\${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}";
+                  }
+                  {
+                    uses = "cachix/install-nix-action@v30";
+                    "with".github_access_token =
+                      "\${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}";
+                  }
+                  {
+                    uses = "docker/login-action@v3";
+                    "with" = {
+                      registry = "ghcr.io";
+                      username = "\${{ github.actor }}";
+                      password = "\${{ secrets.GITHUB_TOKEN }}";
+                    };
+                  }
+                  {
+                    run = "nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold build --platform linux/amd64,linux/arm64";
+                  }
                 ];
-
-                skaffold-render.run = mkWorkflowRun [
-                  "nix"
-                  "shell"
-                  "nixpkgs#ko"
-                  "nixpkgs#skaffold"
-                  "--command"
-                  "skaffold"
-                  "render"
-                  "--output"
-                  "tailscale-gateway.yaml"
-                ];
-
-                upload-deploy-artifacts = {
-                  uses = "actions/upload-artifact@v5";
-                  "with" = {
-                    name = "deploy";
-                    path = "tailscale-gateway.yaml";
-                  };
-                };
-
-                release-upload-deploy-artifacts = {
-                  env.GITHUB_TOKEN = mkWorkflowRef "steps.createGithubAppToken.outputs.token";
-                  run = mkWorkflowRun [
-                    "gh"
-                    "release"
-                    "upload"
-                    (mkWorkflowRef "github.ref_name")
-                    "--repo"
-                    (mkWorkflowRef "github.repository")
-                    "tailscale-gateway.yaml"
-                  ];
-                };
               };
 
-              workflows = with config.devenv.shells.default.github.lib; {
-                push.settings.jobs.build = {
+              release.jobs = {
+                build = {
                   permissions.packages = "write";
                   "runs-on" = "ubuntu-latest";
-                  steps = with config.devenv.shells.default.github.actions; [
-                    create-github-app-token
-                    checkout
-                    setup-nix
-                    docker-login
-                    skaffold-build
+                  steps = [
+                    {
+                      id = "createGithubAppToken";
+                      uses = "actions/create-github-app-token@v1";
+                      "with" = {
+                        app-id = "\${{ vars.OPERATOR_APP_ID }}";
+                        private-key = "\${{ secrets.OPERATOR_PRIVATE_KEY }}";
+                        permission-contents = "write";
+                      };
+                    }
+                    {
+                      uses = "actions/checkout@v4";
+                      "with".token = "\${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}";
+                    }
+                    {
+                      uses = "cachix/install-nix-action@v30";
+                      "with".github_access_token =
+                        "\${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}";
+                    }
+                    {
+                      uses = "docker/login-action@v3";
+                      "with" = {
+                        registry = "ghcr.io";
+                        username = "\${{ github.actor }}";
+                        password = "\${{ secrets.GITHUB_TOKEN }}";
+                      };
+                    }
+                    {
+                      run = "nix shell nixpkgs#ko nixpkgs#skaffold --command skaffold render --output tailscale-gateway.yaml";
+                    }
+                    {
+                      uses = "actions/upload-artifact@v5";
+                      "with" = {
+                        name = "deploy";
+                        path = "tailscale-gateway.yaml";
+                      };
+                    }
                   ];
                 };
 
-                release.settings.jobs = {
-                  build = {
-                    needs = [ "publish" ];
-                    permissions.packages = "write";
-                    "runs-on" = "ubuntu-latest";
-                    steps = with config.devenv.shells.default.github.actions; [
-                      create-github-app-token
-                      checkout
-                      setup-nix
-                      docker-login
-                      skaffold-render
-                      upload-deploy-artifacts
-                    ];
-                  };
-
-                  upload = {
-                    permissions.packages = "write";
-                    needs = [ "build" ];
-                    "runs-on" = "ubuntu-latest";
-                    steps = with config.devenv.shells.default.github.actions; [
-                      create-github-app-token
-                      checkout
-                      download-deploy-artifacts
-                      release-upload-deploy-artifacts
-                    ];
-                  };
+                upload = {
+                  permissions.packages = "write";
+                  needs = [
+                    "build"
+                    "release-tag"
+                  ];
+                  "runs-on" = "ubuntu-latest";
+                  steps = [
+                    {
+                      id = "createGithubAppToken";
+                      uses = "actions/create-github-app-token@v1";
+                      "with" = {
+                        app-id = "\${{ vars.OPERATOR_APP_ID }}";
+                        private-key = "\${{ secrets.OPERATOR_PRIVATE_KEY }}";
+                        permission-contents = "write";
+                      };
+                    }
+                    {
+                      uses = "actions/checkout@v4";
+                      "with".token = "\${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}";
+                    }
+                    {
+                      uses = "actions/download-artifact@v4";
+                      "with".name = "deploy";
+                    }
+                    {
+                      env.GITHUB_TOKEN = "\${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}";
+                      run = "gh release upload \"\${{ github.ref_name }}\" --repo \"\${{ github.repository }}\" tailscale-gateway.yaml";
+                    }
+                  ];
                 };
               };
             };
