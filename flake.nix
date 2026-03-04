@@ -41,7 +41,8 @@
         treefmt-nix.flakeModule
       ];
       perSystem =
-        { pkgs, ... }:
+        { lib, pkgs, ... }:
+        with lib;
         {
           devenv.shells.default = {
             imports = [
@@ -82,17 +83,9 @@
                       password = "\${{ secrets.GITHUB_TOKEN }}";
                     };
                   }
-                  {
-                    env = { };
-                    run = "nix run nixpkgs#direnv allow";
-                  }
-                  {
-                    env = { };
-                    run = "nix run nixpkgs#direnv export gha >> \"$GITHUB_ENV\"";
-                  }
-                  {
-                    run = "skaffold build --platform linux/amd64,linux/arm64";
-                  }
+                  { run = "nix run nixpkgs#direnv allow"; }
+                  { run = "nix run nixpkgs#direnv export gha >> \"$GITHUB_ENV\""; }
+                  { run = "skaffold build --platform linux/amd64,linux/arm64"; }
                 ];
               };
 
@@ -127,17 +120,9 @@
                         password = "\${{ secrets.GITHUB_TOKEN }}";
                       };
                     }
-                    {
-                      env = { };
-                      run = "nix run nixpkgs#direnv allow";
-                    }
-                    {
-                      env = { };
-                      run = "nix run nixpkgs#direnv export gha >> \"$GITHUB_ENV\"";
-                    }
-                    {
-                      run = "skaffold render --output tailscale-gateway.yaml";
-                    }
+                    { run = "nix run nixpkgs#direnv allow"; }
+                    { run = "nix run nixpkgs#direnv export gha >> \"$GITHUB_ENV\""; }
+                    { run = "skaffold render --output tailscale-gateway.yaml"; }
                     {
                       uses = "actions/upload-artifact@v5";
                       "with" = {
@@ -182,10 +167,10 @@
               };
             };
 
-            packages = [
-              pkgs.ko
-              pkgs.kubectl
-              pkgs.skaffold
+            packages = with pkgs; [
+              ko
+              kubectl
+              skaffold
             ];
 
             sops = {
@@ -209,9 +194,9 @@
           packages.default = pkgs.buildGoModule {
             pname = "tailscale-gateway";
             version = "v0.1.0";
-            src = pkgs.lib.cleanSource ./.;
+            src = cleanSource ./.;
             subPackages = [ "cmd/tailscale-gateway-controller" ];
-            vendorHash = pkgs.lib.fakeHash;
+            vendorHash = null;
             meta = with pkgs.lib; {
               description = "Tailscale Gateway";
               homepage = "https://github.com/shikanime-studio/tailscale-gateway";
