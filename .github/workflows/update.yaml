@@ -1,44 +1,55 @@
 jobs:
   dependencies:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
-      - id: createGithubAppToken
+      - continue-on-error: true
+        id: createGithubAppToken
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.OPERATOR_APP_ID }}
+          permission-contents: write
+          permission-pull-requests: write
           private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ steps.createGithubAppToken.outputs.token }}
-      - uses: shikanime-studio/setup-nix-action@v1
+          token: ${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}
+      - uses: cachix/install-nix-action@v31
         with:
-          github-token: ${{ steps.createGithubAppToken.outputs.token }}
-      - uses: shikanime-studio/automata-action@v1
+          github_access_token: ${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}
+      - uses: shikanime-studio/actions/update@v7
         with:
-          ghstack-username: operator6o
-          github-token: ${{ steps.createGithubAppToken.outputs.token }}
+          email: operator6o@shikanime.studio
+          fullname: Operator 6O
+          github-token: ${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}
           gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           sign-commits: true
-          username: Operator 6O <operator6o@shikanime.studio>
+          username: operator6o
   stale:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
-      - id: createGithubAppToken
+      - continue-on-error: true
+        id: createGithubAppToken
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.OPERATOR_APP_ID }}
+          permission-issues: write
+          permission-pull-requests: write
           private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
       - uses: actions/stale@v10
         with:
           days-before-close: 14
           days-before-stale: 30
-          repo-token: ${{ steps.createGithubAppToken.outputs.token }}
+          repo-token: ${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}
           stale-issue-label: stale
           stale-pr-label: stale
 name: Update
 'on':
   schedule:
     - cron: 0 4 * * 0
-  workflow_dispatch: null
+  workflow_dispatch: {}
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write

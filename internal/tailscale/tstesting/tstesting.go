@@ -1,5 +1,5 @@
-// Package testing provides a fake implementation of the Tailscale client for testing.
-package testing
+// Package tstesting provides a fake implementation of the Tailscale client for testing.
+package tstesting
 
 import (
 	"context"

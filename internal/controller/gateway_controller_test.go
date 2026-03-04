@@ -20,7 +20,7 @@ import (
 	gwfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
-	tstesting "github.com/shikanime-studio/tailscale-gateway/internal/tailscale/testing"
+	tstesting "github.com/shikanime-studio/tailscale-gateway/internal/tailscale/tstesting"
 )
 
 // TestGatewayReconciler_Reconcile verifies reconciliation updates Gateway
