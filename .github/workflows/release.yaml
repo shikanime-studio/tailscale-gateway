@@ -21,10 +21,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           registry: ghcr.io
           username: ${{ github.actor }}
-      - env: {}
-        run: nix run nixpkgs#direnv allow
-      - env: {}
-        run: nix run nixpkgs#direnv export gha >> "$GITHUB_ENV"
+      - run: nix run nixpkgs#direnv allow
+      - run: nix run nixpkgs#direnv export gha >> "$GITHUB_ENV"
       - run: skaffold render --output tailscale-gateway.yaml
       - uses: actions/upload-artifact@v5
         with:
