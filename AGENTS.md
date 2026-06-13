@@ -1,4 +1,4 @@
-# Tailscale-Gateway
+# Tailscale Gateway
 
 A Kubernetes controller that provisions a Tailscale-based Gateway, integrating the Gateway API with Tailscale Serve to expose cluster services onto your Tailnet.
 
