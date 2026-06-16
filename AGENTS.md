@@ -38,6 +38,18 @@ Tailnet.
 - Never `gh pr merge` (creates poisoned commits)
 - Never force-push ghstack branches
 
+
+
+## Editing Pull Requests
+
+- The commit title and description **are** the pull request title and body.
+- To edit the PR body after creation, use `gh pr edit <PR_NUMBER>`:
+  - `gh pr edit <PR_NUMBER> --title "New title"` — update the title
+  - `gh pr edit <PR_NUMBER> --body "New body"` — update the body
+  - `gh pr edit <PR_NUMBER> --body-file /path/to/file.md` — set body from file
+- Amending the commit (`jj squash` / `git commit --amend`) and resubmitting
+  with `ghstack` will also update the PR automatically.
+
 ## Protect `main`
 
 - Require 1 approving review
