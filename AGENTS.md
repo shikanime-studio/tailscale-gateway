@@ -30,6 +30,7 @@ Tailnet.
 
 - 1 commit == 1 PR via ghstack (1 commit is 1 logical atomic change)
 - Split work into stacked PRs to keep each PR small and reviewable
+- To pull down an existing stack: `ghstack checkout <PR_NUMBER>`
 - To update a PR: edit files, then `jj squash` (or `git commit --amend`) into the
   **target commit** of the stack — the one that PR represents
 - Resubmit with `ghstack` after squashing
