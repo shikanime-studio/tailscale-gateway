@@ -28,12 +28,14 @@ Tailnet.
 
 ## Stack
 
-- 1 commit == 1 PR via ghstack
-- Amend + `ghstack` to resubmit
-- `ghstack land` on head PR to land the entire stack
+- 1 commit == 1 PR via ghstack (1 commit is 1 logical atomic change)
+- Split work into stacked PRs to keep each PR small and reviewable
+- To update a PR: edit files, then `jj squash` (or `git commit --amend`) into the
+  **target commit** of the stack — the one that PR represents
+- Resubmit with `ghstack` after squashing
+- `ghstack land` on the head PR to land the entire stack
 - Never `gh pr merge` (creates poisoned commits)
 - Never force-push ghstack branches
-- ghstack only works on HEAD commit chains, not detached HEADs
 
 ## Protect `main`
 
