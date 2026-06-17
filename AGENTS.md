@@ -29,28 +29,19 @@ Tailnet.
 ## Stack
 
 - 1 commit == 1 PR via ghstack (1 commit is 1 logical atomic change)
+- The commit title **is** the PR title; the commit body **is** the PR body
 - Split work into stacked PRs to keep each PR small and reviewable
 - To pull down an existing stack: `ghstack checkout <PR_NUMBER>`
 - To update a PR: edit files, then `jj squash` (or `git commit --amend`) into the
-  **target commit** of the stack — the one that PR represents
+  **target commit** of the stack — the one that PR represents; the commit message
+  updates the PR title and body automatically when resubmitted
 - Resubmit with `ghstack` after squashing
 - `ghstack land` on the head PR to land the entire stack
 - Never `gh pr merge` (creates poisoned commits)
 - Never force-push ghstack branches
 
 
-
-## Editing Pull Requests
-
-- The commit title and description **are** the pull request title and body.
-- To edit the PR body after creation, use `gh pr edit <PR_NUMBER>`:
-  - `gh pr edit <PR_NUMBER> --title "New title"` — update the title
-  - `gh pr edit <PR_NUMBER> --body "New body"` — update the body
-  - `gh pr edit <PR_NUMBER> --body-file /path/to/file.md` — set body from file
-- Amending the commit (`jj squash` / `git commit --amend`) and resubmitting
-  with `ghstack` will also update the PR automatically.
-
-## Protect `main`
+ `main`
 
 - Require 1 approving review
 - Require linear history (no merge commits)
