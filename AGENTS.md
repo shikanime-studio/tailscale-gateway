@@ -40,7 +40,6 @@ Tailnet.
 - Never `gh pr merge` (creates poisoned commits)
 - Never force-push ghstack branches
 
-
 ## Protect `main`
 
 - Require 1 approving review
