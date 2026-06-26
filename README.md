@@ -92,6 +92,32 @@ spec:
   loadBalancerClass: tailscale
 ```
 
+## E2E Tests
+
+The e2e suite exercises the controller against a live Kubernetes cluster. It
+expects:
+
+- A running cluster that `kubectl` can reach
+- Gateway API CRDs installed
+- The controller Secret already exists in `tailscale-system`
+- The controller deployed into `tailscale-system`
+
+With Rancher Desktop, make sure the current `kubectl` context points at the
+local cluster, then deploy with Skaffold and run:
+
+```shell
+kubectl create namespace tailscale-system --dry-run=client -o yaml |
+  kubectl apply -f -
+skaffold run
+TMPDIR=/private/tmp \
+  GOCACHE=/private/tmp/tailscale-gateway-gocache \
+  GOFLAGS=-mod=mod \
+  go test -tags e2e ./e2e -count=1
+```
+
+The e2e tests use the Kubernetes client directly and generate unique resource
+names per test run, so they can be run repeatedly against the same cluster.
+
 ## Environment Configuration
 
 - `TAILSCALE_OAUTH_CLIENT_ID`: OAuth client ID with scopes allowing key creation

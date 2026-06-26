@@ -71,7 +71,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	tsClient, err := tailscale.New(cfg)
+	var tsClient tailscale.Interface
+	tsClient, err = tailscale.New(cfg)
 	if err != nil {
 		setupLog.Error(err, "unable to create tailscale client")
 		os.Exit(1)
