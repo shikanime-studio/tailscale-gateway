@@ -1,5 +1,3 @@
-//go:build e2e
-
 package e2e
 
 import (
@@ -39,6 +37,12 @@ var (
 	testClientErr  error
 )
 
+func TestMain(m *testing.M) {
+	if os.Getenv("CI") == "" {
+		m.Run()
+	}
+}
+
 func init() {
 	utilruntime.Must(kscheme.AddToScheme(testScheme))
 	utilruntime.Must(networkingv1.AddToScheme(testScheme))
@@ -60,11 +64,11 @@ func TestGatewayController(t *testing.T) {
 	fixture := newFixture(t, "gateway")
 	ctx := contextWithTimeout(t)
 
-	createNamespace(t, ctx, fixture.namespace)
-	createGateway(t, ctx, fixture.namespace, fixture.gateway)
+	createNamespace(ctx, t, fixture.namespace)
+	createGateway(ctx, t, fixture.namespace, fixture.gateway)
 	createHTTPRoute(
-		t,
 		ctx,
+		t,
 		fixture.namespace,
 		fixture.gateway,
 		fixture.hostname,
@@ -72,13 +76,13 @@ func TestGatewayController(t *testing.T) {
 		fixture.backend,
 	)
 
-	waitForObject(t, ctx, fixture.namespace, fixture.gateway, &gatewayv1.Gateway{})
-	waitForObject(t, ctx, fixture.namespace, fixture.gateway, &gatewayv1.HTTPRoute{})
-	waitForObject(t, ctx, fixture.namespace, fixture.gateway, &corev1.Secret{})
-	waitForObject(t, ctx, fixture.namespace, fixture.gateway, &corev1.ConfigMap{})
-	waitForObject(t, ctx, fixture.namespace, fixture.gateway, &appsv1.DaemonSet{})
+	waitForObject(ctx, t, fixture.namespace, fixture.gateway, &gatewayv1.Gateway{})
+	waitForObject(ctx, t, fixture.namespace, fixture.gateway, &gatewayv1.HTTPRoute{})
+	waitForObject(ctx, t, fixture.namespace, fixture.gateway, &corev1.Secret{})
+	waitForObject(ctx, t, fixture.namespace, fixture.gateway, &corev1.ConfigMap{})
+	waitForObject(ctx, t, fixture.namespace, fixture.gateway, &appsv1.DaemonSet{})
 
-	cfg := getConfigMapData(t, ctx, fixture.namespace, fixture.gateway)
+	cfg := getConfigMapData(ctx, t, fixture.namespace, fixture.gateway)
 	if !strings.Contains(cfg["services.hujson"], "svc:"+fixture.hostname) {
 		t.Fatalf(
 			"expected configmap to reference svc:%s, got %q",
@@ -94,13 +98,13 @@ func TestIngressController(t *testing.T) {
 	fixture := newFixture(t, "ingress")
 	ctx := contextWithTimeout(t)
 
-	createNamespace(t, ctx, fixture.namespace)
-	createIngress(t, ctx, fixture.namespace, fixture.gateway, fixture.hostname, fixture.backend)
+	createNamespace(ctx, t, fixture.namespace)
+	createIngress(ctx, t, fixture.namespace, fixture.gateway, fixture.hostname, fixture.backend)
 
-	waitForObject(t, ctx, fixture.namespace, fixture.gateway, &gatewayv1.Gateway{})
-	waitForObject(t, ctx, fixture.namespace, fixture.gateway, &gatewayv1.HTTPRoute{})
+	waitForObject(ctx, t, fixture.namespace, fixture.gateway, &gatewayv1.Gateway{})
+	waitForObject(ctx, t, fixture.namespace, fixture.gateway, &gatewayv1.HTTPRoute{})
 
-	gw := getGateway(t, ctx, fixture.namespace, fixture.gateway)
+	gw := getGateway(ctx, t, fixture.namespace, fixture.gateway)
 	if len(gw.Spec.Listeners) != 1 {
 		t.Fatalf("expected one listener, got %d", len(gw.Spec.Listeners))
 	}
@@ -118,10 +122,10 @@ func TestServiceController(t *testing.T) {
 		fixture := newFixture(t, "service-http")
 		ctx := contextWithTimeout(t)
 
-		createNamespace(t, ctx, fixture.namespace)
+		createNamespace(ctx, t, fixture.namespace)
 		createService(
-			t,
 			ctx,
+			t,
 			fixture.namespace,
 			fixture.service,
 			fixture.hostname,
@@ -135,16 +139,16 @@ func TestServiceController(t *testing.T) {
 			},
 		)
 
-		waitForObject(t, ctx, fixture.namespace, fixture.service, &gatewayv1.Gateway{})
+		waitForObject(ctx, t, fixture.namespace, fixture.service, &gatewayv1.Gateway{})
 		waitForObject(
-			t,
 			ctx,
+			t,
 			fixture.namespace,
 			serviceRouteNameForTest(fixture.service, "http", 80),
 			&gatewayv1.HTTPRoute{},
 		)
 
-		gw := getGateway(t, ctx, fixture.namespace, fixture.service)
+		gw := getGateway(ctx, t, fixture.namespace, fixture.service)
 		assertListener(t, gw.Spec.Listeners, "http", "HTTP", 80)
 	})
 
@@ -154,10 +158,10 @@ func TestServiceController(t *testing.T) {
 		fixture := newFixture(t, "service-https")
 		ctx := contextWithTimeout(t)
 
-		createNamespace(t, ctx, fixture.namespace)
+		createNamespace(ctx, t, fixture.namespace)
 		createService(
-			t,
 			ctx,
+			t,
 			fixture.namespace,
 			fixture.service,
 			fixture.hostname,
@@ -171,16 +175,16 @@ func TestServiceController(t *testing.T) {
 			},
 		)
 
-		waitForObject(t, ctx, fixture.namespace, fixture.service, &gatewayv1.Gateway{})
+		waitForObject(ctx, t, fixture.namespace, fixture.service, &gatewayv1.Gateway{})
 		waitForObject(
-			t,
 			ctx,
+			t,
 			fixture.namespace,
 			serviceRouteNameForTest(fixture.service, "https", 443),
 			&gatewayv1.HTTPRoute{},
 		)
 
-		gw := getGateway(t, ctx, fixture.namespace, fixture.service)
+		gw := getGateway(ctx, t, fixture.namespace, fixture.service)
 		assertListener(t, gw.Spec.Listeners, "https", "HTTPS", 443)
 	})
 
@@ -190,10 +194,10 @@ func TestServiceController(t *testing.T) {
 		fixture := newFixture(t, "service-tcp-udp")
 		ctx := contextWithTimeout(t)
 
-		createNamespace(t, ctx, fixture.namespace)
+		createNamespace(ctx, t, fixture.namespace)
 		createService(
-			t,
 			ctx,
+			t,
 			fixture.namespace,
 			fixture.service,
 			fixture.hostname,
@@ -211,23 +215,23 @@ func TestServiceController(t *testing.T) {
 			},
 		)
 
-		waitForObject(t, ctx, fixture.namespace, fixture.service, &gatewayv1.Gateway{})
+		waitForObject(ctx, t, fixture.namespace, fixture.service, &gatewayv1.Gateway{})
 		waitForObject(
-			t,
 			ctx,
+			t,
 			fixture.namespace,
 			serviceRouteNameForTest(fixture.service, "tcp", 9000),
 			&gatewayv1alpha2.TCPRoute{},
 		)
 		waitForObject(
-			t,
 			ctx,
+			t,
 			fixture.namespace,
 			serviceRouteNameForTest(fixture.service, "udp", 9001),
 			&gatewayv1alpha2.UDPRoute{},
 		)
 
-		gw := getGateway(t, ctx, fixture.namespace, fixture.service)
+		gw := getGateway(ctx, t, fixture.namespace, fixture.service)
 		assertListener(t, gw.Spec.Listeners, "tcp-9000", "TCP", 9000)
 		assertListener(t, gw.Spec.Listeners, "udp-9001", "UDP", 9001)
 	})
@@ -247,20 +251,20 @@ type configMapObject struct {
 	Data map[string]string `json:"data"`
 }
 
-func createNamespace(t *testing.T, ctx context.Context, namespace string) {
+func createNamespace(ctx context.Context, t *testing.T, namespace string) {
 	t.Helper()
 
-	createObject(t, ctx, &corev1.Namespace{
+	createObject(ctx, t, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
 		},
 	})
 }
 
-func createGateway(t *testing.T, ctx context.Context, namespace, name string) {
+func createGateway(ctx context.Context, t *testing.T, namespace, name string) {
 	t.Helper()
 
-	createObject(t, ctx, &gatewayv1.Gateway{
+	createObject(ctx, t, &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -278,10 +282,10 @@ func createGateway(t *testing.T, ctx context.Context, namespace, name string) {
 	})
 }
 
-func createIngress(t *testing.T, ctx context.Context, namespace, name, hostname, backend string) {
+func createIngress(ctx context.Context, t *testing.T, namespace, name, hostname, backend string) {
 	t.Helper()
 
-	createObject(t, ctx, &networkingv1.Ingress{
+	createObject(ctx, t, &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -316,14 +320,14 @@ func createIngress(t *testing.T, ctx context.Context, namespace, name, hostname,
 }
 
 func createService(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	namespace, name, hostname string,
 	ports []corev1.ServicePort,
 ) {
 	t.Helper()
 
-	createObject(t, ctx, &corev1.Service{
+	createObject(ctx, t, &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -340,14 +344,14 @@ func createService(
 }
 
 func createHTTPRoute(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	namespace, name, hostname, parent, backend string,
 ) {
 	t.Helper()
 
 	port := gatewayv1.PortNumber(80)
-	createObject(t, ctx, &gatewayv1.HTTPRoute{
+	createObject(ctx, t, &gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -387,7 +391,7 @@ func createHTTPRoute(
 	})
 }
 
-func createObject[T crclient.Object](t *testing.T, ctx context.Context, obj T) {
+func createObject[T crclient.Object](ctx context.Context, t *testing.T, obj T) {
 	t.Helper()
 
 	if err := kubeClient(t).Create(ctx, obj); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -396,24 +400,24 @@ func createObject[T crclient.Object](t *testing.T, ctx context.Context, obj T) {
 }
 
 func waitForObject[T crclient.Object](
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	namespace, name string,
 	obj T,
 ) T {
 	t.Helper()
 
-	waitFor(t, ctx, func(ctx context.Context) error {
+	waitFor(ctx, t, func(ctx context.Context) error {
 		return kubeClient(t).Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, obj)
 	})
 	return obj
 }
 
-func getGateway(t *testing.T, ctx context.Context, namespace, name string) gatewayObject {
+func getGateway(ctx context.Context, t *testing.T, namespace, name string) gatewayObject {
 	t.Helper()
 
 	obj := &gatewayv1.Gateway{}
-	waitForObject(t, ctx, namespace, name, obj)
+	waitForObject(ctx, t, namespace, name, obj)
 
 	var out gatewayObject
 	data, err := json.Marshal(obj)
@@ -426,11 +430,11 @@ func getGateway(t *testing.T, ctx context.Context, namespace, name string) gatew
 	return out
 }
 
-func getConfigMapData(t *testing.T, ctx context.Context, namespace, name string) map[string]string {
+func getConfigMapData(ctx context.Context, t *testing.T, namespace, name string) map[string]string {
 	t.Helper()
 
 	obj := &corev1.ConfigMap{}
-	waitForObject(t, ctx, namespace, name, obj)
+	waitForObject(ctx, t, namespace, name, obj)
 
 	var out configMapObject
 	data, err := json.Marshal(obj)
@@ -458,17 +462,17 @@ func assertListener(t *testing.T, listeners []struct {
 	t.Fatalf("expected listener %s/%s/%d, got %#v", name, proto, port, listeners)
 }
 
-func waitFor(t *testing.T, ctx context.Context, fn func(context.Context) error) {
+func waitFor(ctx context.Context, t *testing.T, fn func(context.Context) error) {
 	t.Helper()
 
 	deadline := time.Now().Add(defaultTimeout)
 	var lastErr error
 	for time.Now().Before(deadline) {
-		if err := fn(ctx); err == nil {
+		err := fn(ctx)
+		if err == nil {
 			return
-		} else {
-			lastErr = err
 		}
+		lastErr = err
 		time.Sleep(2 * time.Second)
 	}
 	t.Fatalf("timed out waiting for condition: %v", lastErr)
@@ -521,13 +525,6 @@ func newFixture(t *testing.T, scope string) fixture {
 
 func serviceRouteNameForTest(name, proto string, port int) string {
 	return fmt.Sprintf("%s-%s-%d", name, proto, port)
-}
-
-func envOrDefault(key, defaultValue string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return defaultValue
 }
 
 func durationEnvOrDefault(key string, defaultValue time.Duration) time.Duration {

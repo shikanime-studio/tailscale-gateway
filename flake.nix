@@ -42,7 +42,6 @@
       ];
       perSystem =
         {
-          config,
           lib,
           pkgs,
           ...
@@ -56,6 +55,8 @@
               devlib.devenvModules.shell
               devlib.devenvModules.shikanime-studio
             ];
+
+            git-hooks.hooks.gotest.excludes = [ "^e2e/*" ];
 
             github.workflows = {
               integration.enable = true;
@@ -75,11 +76,6 @@
               kubectl
               skaffold
             ];
-
-            env = {
-              TAILSCALE_OAUTH_CLIENT_ID = config.secretspec.secrets.TAILSCALE_OAUTH_CLIENT_ID or "";
-              TAILSCALE_OAUTH_CLIENT_SECRET = config.secretspec.secrets.TAILSCALE_OAUTH_CLIENT_SECRET or "";
-            };
           };
 
           packages.default = pkgs.buildGoModule {
