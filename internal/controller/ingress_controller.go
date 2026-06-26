@@ -161,13 +161,6 @@ func (r *IngressReconciler) applyGateway(ctx context.Context, gw *v1.Gateway) er
 		Gateways(gw.Namespace).
 		Apply(ctx, gatewayApplyConfiguration(gw), applyGatewayOptions())
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			_, err = r.Gateway.GatewayV1().
-				Gateways(gw.Namespace).
-				Create(ctx, gw, metav1.CreateOptions{})
-		}
-	}
-	if err != nil {
 		return fmt.Errorf("failed to apply gateway: %w", err)
 	}
 	return nil
@@ -178,13 +171,6 @@ func (r *IngressReconciler) applyHTTPRoute(ctx context.Context, hr *v1.HTTPRoute
 	_, err := r.Gateway.GatewayV1().
 		HTTPRoutes(hr.Namespace).
 		Apply(ctx, httpRouteApplyConfiguration(hr), applyGatewayOptions())
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			_, err = r.Gateway.GatewayV1().
-				HTTPRoutes(hr.Namespace).
-				Create(ctx, hr, metav1.CreateOptions{})
-		}
-	}
 	if err != nil {
 		return fmt.Errorf("failed to apply httproute: %w", err)
 	}
