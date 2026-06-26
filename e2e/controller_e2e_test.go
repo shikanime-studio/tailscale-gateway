@@ -37,12 +37,6 @@ var (
 	testClientErr  error
 )
 
-func TestMain(m *testing.M) {
-	if os.Getenv("CI") == "" {
-		m.Run()
-	}
-}
-
 func init() {
 	utilruntime.Must(kscheme.AddToScheme(testScheme))
 	utilruntime.Must(networkingv1.AddToScheme(testScheme))
