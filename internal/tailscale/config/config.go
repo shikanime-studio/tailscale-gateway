@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/utils/ptr"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"tailscale.com/ipn"
@@ -23,6 +24,7 @@ func (c *Config) Marshal() ([]byte, error) {
 
 type options struct {
 	HTTPRoutes []*gatewayv1.HTTPRoute
+	Ingresses  []*networkingv1.Ingress
 }
 
 // Option modifies options used to build a Config.
@@ -69,6 +71,10 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 				cfg.cfg.Services[svcName] = svc
 			}
 		}
+	}
+
+	if err := buildIngressServices(cfg, o.Ingresses); err != nil {
+		return nil, err
 	}
 
 	return cfg, nil

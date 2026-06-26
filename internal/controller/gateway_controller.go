@@ -141,31 +141,17 @@ func (r *GatewayReconciler) finalizeGateway(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) error {
-	// The object is being deleted
-	if controllerutil.ContainsFinalizer(gw, FinalizerTailscale) {
-		// our finalizer is present, so let's handle any external dependency
-
-		sec, err := r.Kube.CoreV1().Secrets(gw.Namespace).Get(ctx, gw.Name, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to get secret: %w", err)
-		}
-		if sec.Data != nil {
-			if b, ok := sec.Data["device_id"]; ok {
-				devID := string(b)
-				if devID != "" {
-					if err = r.Tailscale.DeleteDevice(ctx, devID); err != nil {
-						return fmt.Errorf("failed to delete device: %w", err)
-					}
-				}
-			}
-		}
-		// remove our finalizer from the list and update it.
-		controllerutil.RemoveFinalizer(gw, FinalizerTailscale)
-		if _, err := r.Gateway.GatewayV1().
-			Gateways(gw.Namespace).
-			Update(ctx, gw, metav1.UpdateOptions{}); err != nil {
-			return fmt.Errorf("failed to update gateway: %w", err)
-		}
+	if !controllerutil.ContainsFinalizer(gw, FinalizerTailscale) {
+		return nil
+	}
+	if err := reconcilerutil.CleanupDevice(ctx, r.Kube, r.Tailscale, gw.Name, gw.Namespace); err != nil {
+		return err
+	}
+	controllerutil.RemoveFinalizer(gw, FinalizerTailscale)
+	if _, err := r.Gateway.GatewayV1().
+		Gateways(gw.Namespace).
+		Update(ctx, gw, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("failed to update gateway: %w", err)
 	}
 	return nil
 }
