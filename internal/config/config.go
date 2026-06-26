@@ -35,13 +35,25 @@ func New() (*Config, error) {
 	if err := v.BindEnv("ts_tags", "TAILSCALE_TAGS", "ts_tags"); err != nil {
 		return nil, err
 	}
-	if err := v.BindEnv("ts_oauth_client_id", "TAILSCALE_OAUTH_CLIENT_ID", "ts_oauth_client_id"); err != nil {
+	if err := v.BindEnv(
+		"ts_oauth_client_id",
+		"TAILSCALE_OAUTH_CLIENT_ID",
+		"ts_oauth_client_id",
+	); err != nil {
 		return nil, err
 	}
-	if err := v.BindEnv("ts_oauth_client_secret", "TAILSCALE_OAUTH_CLIENT_SECRET", "ts_oauth_client_secret"); err != nil {
+	if err := v.BindEnv(
+		"ts_oauth_client_secret",
+		"TAILSCALE_OAUTH_CLIENT_SECRET",
+		"ts_oauth_client_secret",
+	); err != nil {
 		return nil, err
 	}
-	if err := v.BindEnv("ts_key_description", "TAILSCALE_KEY_DESCRIPTION", "ts_key_description"); err != nil {
+	if err := v.BindEnv(
+		"ts_key_description",
+		"TAILSCALE_KEY_DESCRIPTION",
+		"ts_key_description",
+	); err != nil {
 		return nil, err
 	}
 

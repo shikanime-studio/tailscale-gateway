@@ -15,10 +15,10 @@ spec:
       labels:
         app: tailscale-gateway-controller
     spec:
-      serviceAccountName: tailscale-gateway-controller
       containers:
         - name: controller
           image: ghcr.io/shikanime-studio/tailscale-gateway/controller
           envFrom:
             - secretRef:
                 name: tailscale-gateway-controller
+      serviceAccountName: tailscale-gateway-controller

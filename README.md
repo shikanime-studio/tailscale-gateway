@@ -27,7 +27,8 @@ kubectl get crd gateways.gateway.networking.k8s.io httproutes.gateway.networking
 
 ### Configure Controller Secrets
 
-Create the Secret the controller consumes for environment configuration in the `tailscale-system` namespace:
+Create the Secret the controller consumes for environment configuration in the
+`tailscale-system` namespace:
 
 ```shell
 kubectl create namespace tailscale-system
@@ -73,6 +74,24 @@ kubectl -n tailscale-gateway-demo get httproute demo
 When reconciliation succeeds, the `Gateway` status reports Ready and the
 controller.
 
+### Create a Service
+
+To expose a `Service` through Tailscale, set `spec.type` to `LoadBalancer`, set
+`spec.loadBalancerClass` to `tailscale`, and add the hostname annotation used by
+the service controller:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo
+  annotations:
+    tailscale.gateway.shikanime.studio/hostname: demo.example.com
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+```
+
 ## Environment Configuration
 
 - `TAILSCALE_OAUTH_CLIENT_ID`: OAuth client ID with scopes allowing key creation
@@ -97,5 +116,6 @@ from `TAILSCALE_TAGS` and default to `tag:gateway` when unset.
 
 ## References
 
-- Tailscale client for API: https://github.com/tailscale/tailscale-client-go-v2
-- OAuth clients and scopes: https://tailscale.com/kb/1215/oauth-clients
+- Tailscale client for API:
+  <https://github.com/tailscale/tailscale-client-go-v2>
+- OAuth clients and scopes: <https://tailscale.com/kb/1215/oauth-clients>

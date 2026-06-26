@@ -52,119 +52,16 @@
               devlib.devenvModules.shikanime-studio
             ];
 
-            github.settings.workflows = {
-              integration.jobs.build = {
-                permissions.packages = "write";
-                "runs-on" = "ubuntu-latest";
-                steps = [
-                  {
-                    id = "createGithubAppToken";
-                    uses = "actions/create-github-app-token@v1";
-                    "with" = {
-                      app-id = "\${{ vars.OPERATOR_APP_ID }}";
-                      private-key = "\${{ secrets.OPERATOR_PRIVATE_KEY }}";
-                      permission-contents = "read";
-                    };
-                  }
-                  {
-                    uses = "actions/checkout@v4";
-                    "with".token = "\${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}";
-                  }
-                  {
-                    uses = "cachix/install-nix-action@v30";
-                    "with".github_access_token =
-                      "\${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}";
-                  }
-                  {
-                    uses = "docker/login-action@v3";
-                    "with" = {
-                      registry = "ghcr.io";
-                      username = "\${{ github.actor }}";
-                      password = "\${{ secrets.GITHUB_TOKEN }}";
-                    };
-                  }
-                  { run = "nix run nixpkgs#direnv allow"; }
-                  { run = "nix run nixpkgs#direnv export gha >> \"$GITHUB_ENV\""; }
-                  { run = "skaffold build --platform linux/amd64,linux/arm64"; }
-                ];
+            github.workflows = {
+              integration.enable = true;
+              nix = {
+                enable = true;
+                settings.setup-nix.extra-platforms = "aarch64-linux";
               };
-
-              release.jobs = {
-                build = {
-                  permissions.packages = "write";
-                  "runs-on" = "ubuntu-latest";
-                  steps = [
-                    {
-                      id = "createGithubAppToken";
-                      uses = "actions/create-github-app-token@v1";
-                      "with" = {
-                        app-id = "\${{ vars.OPERATOR_APP_ID }}";
-                        private-key = "\${{ secrets.OPERATOR_PRIVATE_KEY }}";
-                        permission-contents = "write";
-                      };
-                    }
-                    {
-                      uses = "actions/checkout@v4";
-                      "with".token = "\${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}";
-                    }
-                    {
-                      uses = "cachix/install-nix-action@v30";
-                      "with".github_access_token =
-                        "\${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}";
-                    }
-                    {
-                      uses = "docker/login-action@v3";
-                      "with" = {
-                        registry = "ghcr.io";
-                        username = "\${{ github.actor }}";
-                        password = "\${{ secrets.GITHUB_TOKEN }}";
-                      };
-                    }
-                    { run = "nix run nixpkgs#direnv allow"; }
-                    { run = "nix run nixpkgs#direnv export gha >> \"$GITHUB_ENV\""; }
-                    { run = "skaffold build --platform linux/amd64,linux/arm64 --push"; }
-                    { run = "skaffold render --output tailscale-gateway.yaml"; }
-                    {
-                      uses = "actions/upload-artifact@v5";
-                      "with" = {
-                        name = "deploy";
-                        path = "tailscale-gateway.yaml";
-                      };
-                    }
-                  ];
-                };
-
-                upload = {
-                  permissions.packages = "write";
-                  needs = [
-                    "build"
-                    "release-tag"
-                  ];
-                  "runs-on" = "ubuntu-latest";
-                  steps = [
-                    {
-                      id = "createGithubAppToken";
-                      uses = "actions/create-github-app-token@v1";
-                      "with" = {
-                        app-id = "\${{ vars.OPERATOR_APP_ID }}";
-                        private-key = "\${{ secrets.OPERATOR_PRIVATE_KEY }}";
-                        permission-contents = "write";
-                      };
-                    }
-                    {
-                      uses = "actions/checkout@v4";
-                      "with".token = "\${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}";
-                    }
-                    {
-                      uses = "actions/download-artifact@v4";
-                      "with".name = "deploy";
-                    }
-                    {
-                      env.GITHUB_TOKEN = "\${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}";
-                      run = "gh release upload \"\${{ github.ref_name }}\" --repo \"\${{ github.repository }}\" tailscale-gateway.yaml";
-                    }
-                  ];
-                };
+              release.enable = true;
+              skaffold = {
+                enable = true;
+                settings.setup-nix.extra-platforms = "aarch64-linux";
               };
             };
 
@@ -208,7 +105,6 @@
         };
       systems = [
         "x86_64-linux"
-        "x86_64-darwin"
         "aarch64-linux"
         "aarch64-darwin"
       ];

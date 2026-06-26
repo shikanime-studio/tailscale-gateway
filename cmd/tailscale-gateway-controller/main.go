@@ -15,6 +15,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	versioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
@@ -31,6 +32,7 @@ var (
 func init() {
 	utilruntime.Must(kscheme.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(gatewayv1alpha2.Install(scheme))
 }
 
 // main starts the controller manager and sets up the Gateway reconciler and
@@ -75,7 +77,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	reconciler := controller.NewGatewayReconciler(kubeClient, gwClient, tsClient, mgr.GetScheme(), cfg)
+	reconciler := controller.NewGatewayReconciler(
+		kubeClient,
+		gwClient,
+		tsClient,
+		mgr.GetScheme(),
+		cfg,
+	)
 	if err = reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Gateway")
 		os.Exit(1)
@@ -84,6 +92,12 @@ func main() {
 	ingressReconciler := controller.NewIngressReconciler(kubeClient, gwClient, mgr.GetScheme())
 	if err = ingressReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Ingress")
+		os.Exit(1)
+	}
+
+	serviceReconciler := controller.NewServiceReconciler(kubeClient, gwClient, mgr.GetScheme())
+	if err = serviceReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Service")
 		os.Exit(1)
 	}
 

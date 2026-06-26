@@ -1,15 +1,16 @@
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: tailscale-gateway-controller
 rules:
-  - apiGroups:
-      - gateway.networking.k8s.io
-    resources:
+  - resources:
       - gateways
       - gateways/status
       - httproutes
       - httproutes/status
+    apiGroups:
+      - gateway.networking.k8s.io
     verbs:
       - get
       - list
@@ -18,35 +19,24 @@ rules:
       - update
       - patch
       - delete
-  - apiGroups:
-      - networking.k8s.io
-    resources:
+  - resources:
       - ingresses
       - ingresses/status
+    apiGroups:
+      - networking.k8s.io
     verbs:
       - get
       - list
       - watch
       - update
       - patch
-  - apiGroups:
-      - ""
-    resources:
+  - resources:
       - services
       - endpoints
       - secrets
       - configmaps
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-  - apiGroups:
+    apiGroups:
       - ""
-    resources:
-      - serviceaccounts
     verbs:
       - get
       - list
@@ -54,11 +44,22 @@ rules:
       - create
       - update
       - patch
-  - apiGroups:
-      - apps
-    resources:
+  - resources:
+      - serviceaccounts
+    apiGroups:
+      - ""
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+  - resources:
       - deployments
       - daemonsets
+    apiGroups:
+      - apps
     verbs:
       - get
       - list
@@ -67,10 +68,10 @@ rules:
       - update
       - patch
       - delete
-  - apiGroups:
-      - coordination.k8s.io
-    resources:
+  - resources:
       - leases
+    apiGroups:
+      - coordination.k8s.io
     verbs:
       - get
       - list
@@ -79,18 +80,18 @@ rules:
       - update
       - patch
       - delete
-  - apiGroups:
-      - ""
-    resources:
+  - resources:
       - events
+    apiGroups:
+      - ""
     verbs:
       - get
       - create
       - patch
-  - apiGroups:
-      - rbac.authorization.k8s.io
-    resources:
+  - resources:
       - clusterrolebindings
+    apiGroups:
+      - rbac.authorization.k8s.io
     verbs:
       - get
       - list
@@ -98,10 +99,10 @@ rules:
       - create
       - update
       - patch
-  - apiGroups:
-      - rbac.authorization.k8s.io
-    resources:
+  - resources:
       - clusterroles
+    apiGroups:
+      - rbac.authorization.k8s.io
     resourceNames:
       - tailscale-gateway-proxy
     verbs:
@@ -112,12 +113,12 @@ kind: ClusterRoleBinding
 metadata:
   name: tailscale-gateway-controller
 roleRef:
+  name: tailscale-gateway-controller
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: tailscale-gateway-controller
 subjects:
-  - kind: ServiceAccount
-    name: tailscale-gateway-controller
+  - name: tailscale-gateway-controller
+    kind: ServiceAccount
     namespace: tailscale-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -125,10 +126,10 @@ kind: ClusterRole
 metadata:
   name: tailscale-gateway-proxy
 rules:
-  - apiGroups:
-      - ""
-    resources:
+  - resources:
       - secrets
+    apiGroups:
+      - ""
     verbs:
       - get
       - list
@@ -136,10 +137,10 @@ rules:
       - create
       - update
       - patch
-  - apiGroups:
-      - ""
-    resources:
+  - resources:
       - events
+    apiGroups:
+      - ""
     verbs:
       - get
       - create

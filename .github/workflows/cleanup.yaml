@@ -1,34 +1,25 @@
+name: Cleanup
+permissions:
+  contents: read
+"on":
+  pull_request:
+    types:
+      - closed
 jobs:
   cleanup:
+    if: ${{ github.event.pull_request.head.repo.fork == false }}
     runs-on: ubuntu-slim
     steps:
-      - continue-on-error: true
-        id: createGithubAppToken
-        uses: actions/create-github-app-token@v2
+      - id: createGithubAppToken
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ vars.OPERATOR_APP_ID }}
           permission-contents: write
           private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-      - uses: actions/checkout@v6
+      - uses: shikanime-studio/actions/nix/setup@v9
         with:
-          fetch-depth: 0
-          token: ${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}
-      - env:
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_REF: ${{ github.head_ref }}
-          REPO: ${{ github.repository }}
-        if: '!(startsWith(github.head_ref, ''gh/'') && endsWith(github.head_ref, ''/head''))'
-        run: git push origin --delete "$HEAD_REF" || true
-      - env:
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_REF: ${{ github.head_ref }}
-          REPO: ${{ github.repository }}
-        if: startsWith(github.head_ref, 'gh/') && endsWith(github.head_ref, '/head')
-        run: for role in base head orig; do git push origin --delete "${HEAD_REF%/head}/$role" || true; done
-name: Cleanup
-'on':
-  pull_request:
-    types:
-      - closed
-permissions:
-  contents: write
+          github-token: ${{ steps.createGithubAppToken.outputs.token }}
+      - uses: shikanime-studio/actions/cleanup@v9
+        with:
+          github-token: ${{ steps.createGithubAppToken.outputs.token }}
+          pull-request-url: ${{ github.event.pull_request.html_url }}
