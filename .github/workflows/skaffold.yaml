@@ -39,16 +39,30 @@ jobs:
           username: ${{ github.actor }}
       - uses: shikanime-studio/actions/nix/setup@v9
         with:
-          extra-platforms: aarch64-linux
+          extra-platforms: amd64
           github-token:
             ${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN
             }}
       - id: direnv
         uses: shikanime-studio/actions/direnv@v9
-      - env: ${{ fromJSON(steps.direnv.outputs.env) }}
+      - id: skaffold
+        env: ${{ fromJSON(steps.direnv.outputs.env) }}
         uses: shikanime-studio/actions/skaffold/integration@v9
         with:
           push: ${{ inputs.push }}
+      - name: Save manifest
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/skaffold-manifest.yaml <<'MANIFEST_EOF'
+          $SKAFFOLD_MANIFEST
+          MANIFEST_EOF
+        shell: bash
+        env:
+          SKAFFOLD_MANIFEST: ${{ steps.skaffold.outputs.manifest }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skaffold-manifest
+          path: artifacts/skaffold-manifest.yaml
   build-render-profile:
     name: Build & Render (Profile)
     if: ${{ needs['setup-profiles-jobs'].outputs.continue == 'true' }}
@@ -82,7 +96,7 @@ jobs:
           username: ${{ github.actor }}
       - uses: shikanime-studio/actions/nix/setup@v9
         with:
-          extra-platforms: aarch64-linux
+          extra-platforms: amd64
           github-token:
             ${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN
             }}
@@ -114,7 +128,7 @@ jobs:
             }}
       - uses: shikanime-studio/actions/nix/setup@v9
         with:
-          extra-platforms: aarch64-linux
+          extra-platforms: amd64
           github-token:
             ${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN
             }}

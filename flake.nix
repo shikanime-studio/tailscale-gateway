@@ -62,12 +62,12 @@
               integration.enable = true;
               nix = {
                 enable = true;
-                settings.setup-nix.extra-platforms = "aarch64-linux";
+                settings.setup-nix.extra-platforms = "amd64";
               };
               release.enable = true;
               skaffold = {
                 enable = true;
-                settings.setup-nix.extra-platforms = "aarch64-linux";
+                settings.setup-nix.extra-platforms = "amd64";
               };
             };
 
