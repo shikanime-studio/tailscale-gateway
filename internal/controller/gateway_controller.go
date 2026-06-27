@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gateway "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/apiutil"
@@ -197,6 +198,58 @@ func (r *GatewayReconciler) listHTTPRoutesForGateway(
 	return hrs, nil
 }
 
+// listTCPRoutesForGateway returns all TCPRoutes that reference the provided Gateway.
+func (r *GatewayReconciler) listTCPRoutesForGateway(
+	ctx context.Context,
+	gw *gatewayv1.Gateway,
+) ([]*gatewayv1alpha2.TCPRoute, error) {
+	trList, err := r.Gateway.GatewayV1alpha2().
+		TCPRoutes(metav1.NamespaceAll).
+		List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list TCPRoutes: %w", err)
+	}
+
+	trs := make([]*gatewayv1alpha2.TCPRoute, 0, len(trList.Items))
+	for _, route := range trList.Items {
+		for _, parentRef := range route.Spec.ParentRefs {
+			gwNs := gatewayv1.Namespace(gw.Namespace)
+			prNs := ptr.Deref(parentRef.Namespace, gwNs)
+			if parentRef.Name == gatewayv1.ObjectName(gw.Name) && prNs == gwNs {
+				trs = append(trs, &route)
+			}
+		}
+	}
+
+	return trs, nil
+}
+
+// listUDPRoutesForGateway returns all UDPRoutes that reference the provided Gateway.
+func (r *GatewayReconciler) listUDPRoutesForGateway(
+	ctx context.Context,
+	gw *gatewayv1.Gateway,
+) ([]*gatewayv1alpha2.UDPRoute, error) {
+	urList, err := r.Gateway.GatewayV1alpha2().
+		UDPRoutes(metav1.NamespaceAll).
+		List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list UDPRoutes: %w", err)
+	}
+
+	urs := make([]*gatewayv1alpha2.UDPRoute, 0, len(urList.Items))
+	for _, route := range urList.Items {
+		for _, parentRef := range route.Spec.ParentRefs {
+			gwNs := gatewayv1.Namespace(gw.Namespace)
+			prNs := ptr.Deref(parentRef.Namespace, gwNs)
+			if parentRef.Name == gatewayv1.ObjectName(gw.Name) && prNs == gwNs {
+				urs = append(urs, &route)
+			}
+		}
+	}
+
+	return urs, nil
+}
+
 // reconcileResources ensures all Kubernetes resources and Tailscale
 // configuration for the Gateway are created and up to date, then updates status.
 func (r *GatewayReconciler) reconcileResources(
@@ -209,10 +262,20 @@ func (r *GatewayReconciler) reconcileResources(
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list HTTPRoutes: %w", err)
 	}
+	trs, err := r.listTCPRoutesForGateway(ctx, gw)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list TCPRoutes: %w", err)
+	}
+	urs, err := r.listUDPRoutesForGateway(ctx, gw)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list UDPRoutes: %w", err)
+	}
 
 	cfg, err := tsconfig.NewConfig(
 		gw,
 		tsconfig.WithHTTPRoutes(hrs),
+		tsconfig.WithTCPRoutes(trs),
+		tsconfig.WithUDPRoutes(urs),
 	)
 	if err != nil {
 		apiutil.SetGatewayAcceptedCondition(
@@ -266,7 +329,9 @@ func (r *GatewayReconciler) reconcileResources(
 		return ctrl.Result{}, fmt.Errorf("failed to update status addresses: %w", err)
 	}
 
-	if _, err := r.Gateway.GatewayV1().Gateways(gw.Namespace).UpdateStatus(ctx, gw, metav1.UpdateOptions{}); err != nil {
+	if _, err := r.Gateway.GatewayV1().
+		Gateways(gw.Namespace).
+		UpdateStatus(ctx, gw, metav1.UpdateOptions{}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update gateway status: %w", err)
 	}
 

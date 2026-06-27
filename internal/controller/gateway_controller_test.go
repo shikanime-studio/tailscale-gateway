@@ -171,13 +171,17 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 
 			// Initialize fake clients
 			gwClient := gwfake.NewSimpleClientset()
-			if _, err := gwClient.GatewayV1().Gateways(tt.gateway.Namespace).Create(context.Background(), tt.gateway, metav1.CreateOptions{}); err != nil {
+			if _, err := gwClient.GatewayV1().
+				Gateways(tt.gateway.Namespace).
+				Create(context.Background(), tt.gateway, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("failed to create gateway: %v", err)
 			}
 
 			// Add HTTPRoutes to gwClient
 			for _, hr := range tt.httproutes {
-				_, err := gwClient.GatewayV1().HTTPRoutes(hr.Namespace).Create(context.Background(), &hr, metav1.CreateOptions{})
+				_, err := gwClient.GatewayV1().
+					HTTPRoutes(hr.Namespace).
+					Create(context.Background(), &hr, metav1.CreateOptions{})
 				if err != nil {
 					t.Fatalf("failed to create HTTPRoute: %v", err)
 				}
@@ -221,7 +225,10 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 					Gateways(tt.gateway.Namespace).
 					Get(context.Background(), tt.gateway.Name, metav1.GetOptions{})
 
-				condition := meta.FindStatusCondition(updatedGateway.Status.Conditions, string(gatewayv1.GatewayConditionProgrammed))
+				condition := meta.FindStatusCondition(
+					updatedGateway.Status.Conditions,
+					string(gatewayv1.GatewayConditionProgrammed),
+				)
 				if condition != nil && condition.Status == metav1.ConditionTrue {
 					t.Errorf("expected error, but got nil and Gateway is ready")
 				}
@@ -241,10 +248,17 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 			// Log Gateway status for debugging
 			t.Logf("Gateway Status: %+v", updatedGateway.Status)
 
-			condition := meta.FindStatusCondition(updatedGateway.Status.Conditions, string(gatewayv1.GatewayConditionProgrammed))
+			condition := meta.FindStatusCondition(
+				updatedGateway.Status.Conditions,
+				string(gatewayv1.GatewayConditionProgrammed),
+			)
 			if tt.expectedReady {
 				if condition == nil || condition.Status != metav1.ConditionTrue {
-					t.Errorf("expected Gateway to be ready, but condition is %v. Conditions: %+v", condition, updatedGateway.Status.Conditions)
+					t.Errorf(
+						"expected Gateway to be ready, but condition is %v. Conditions: %+v",
+						condition,
+						updatedGateway.Status.Conditions,
+					)
 				}
 			} else {
 				if condition != nil && condition.Status == metav1.ConditionTrue {
@@ -254,7 +268,9 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 
 			// Verify dependent resources (DaemonSet)
 			if tt.expectedReady {
-				ds, err := kubeClient.AppsV1().DaemonSets(tt.gateway.Namespace).Get(context.Background(), tt.gateway.Name, metav1.GetOptions{})
+				ds, err := kubeClient.AppsV1().
+					DaemonSets(tt.gateway.Namespace).
+					Get(context.Background(), tt.gateway.Name, metav1.GetOptions{})
 				if err != nil {
 					t.Errorf("expected DaemonSet to exist, but got error: %v", err)
 				} else {

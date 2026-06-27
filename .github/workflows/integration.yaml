@@ -1,57 +1,44 @@
-jobs:
-  build:
-    permissions:
-      packages: write
-    runs-on: ubuntu-latest
-    steps:
-      - id: createGithubAppToken
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ vars.OPERATOR_APP_ID }}
-          permission-contents: read
-          private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}
-      - uses: cachix/install-nix-action@v30
-        with:
-          github_access_token: ${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}
-      - uses: docker/login-action@v3
-        with:
-          password: ${{ secrets.GITHUB_TOKEN }}
-          registry: ghcr.io
-          username: ${{ github.actor }}
-      - run: nix run nixpkgs#direnv allow
-      - run: nix run nixpkgs#direnv export gha >> "$GITHUB_ENV"
-      - run: skaffold build --platform linux/amd64,linux/arm64
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - continue-on-error: true
-        id: createGithubAppToken
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ vars.OPERATOR_APP_ID }}
-          permission-contents: read
-          private-key: ${{ secrets.OPERATOR_PRIVATE_KEY }}
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          token: ${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}
-      - uses: cachix/install-nix-action@v31
-        with:
-          github_access_token: ${{ steps.createGithubAppToken.outputs.token || secrets.GITHUB_TOKEN }}
-      - env: {}
-        run: nix run nixpkgs#direnv allow
-      - env: {}
-        run: nix run nixpkgs#direnv export gha >> "$GITHUB_ENV"
-      - env: {}
-        run: nix flake check --accept-flake-config --no-pure-eval
 name: Integration
-'on':
+permissions:
+  contents: read
+jobs:
+  nix:
+    if:
+      ${{ github.event_name == 'workflow_call' || github.event_name ==
+      'workflow_dispatch' || github.event.pull_request.draft == false }}
+    permissions:
+      contents: read
+      packages: write
+    secrets:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      OPERATOR_PRIVATE_KEY: ${{ secrets.OPERATOR_PRIVATE_KEY }}
+    uses: ./.github/workflows/nix.yaml
+    with:
+      cachix-name: shikanime-studio
+  skaffold:
+    if:
+      ${{ github.event_name == 'workflow_call' || github.event_name ==
+      'workflow_dispatch' || github.event.pull_request.draft == false }}
+    permissions:
+      contents: read
+      packages: write
+    secrets:
+      OPERATOR_PRIVATE_KEY: ${{ secrets.OPERATOR_PRIVATE_KEY }}
+    uses: ./.github/workflows/skaffold.yaml
+"on":
   pull_request:
     branches:
       - main
       - gh/*/*/base
-permissions:
-  contents: read
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+  workflow_call:
+    secrets:
+      CACHIX_AUTH_TOKEN:
+        required: false
+      OPERATOR_PRIVATE_KEY:
+        required: true
+  workflow_dispatch: {}
