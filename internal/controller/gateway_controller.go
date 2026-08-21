@@ -11,6 +11,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -18,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 	gateway "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/apiutil"
@@ -28,10 +31,20 @@ import (
 	tsconfig "github.com/shikanime-studio/tailscale-gateway/internal/tailscale/config"
 )
 
+// tlsRouteGVR is the GroupVersionResource for TLSRoute. TLSRoute has graduated
+// across gateway-api releases (v1alpha2 -> v1); using the dynamic client keeps
+// the controller resilient to whichever version the cluster serves.
+var tlsRouteGVR = schema.GroupVersionResource{
+	Group:    "gateway.networking.k8s.io",
+	Version:  "v1",
+	Resource: "tlsroutes",
+}
+
 // GatewayReconciler reconciles a Gateway object.
 type GatewayReconciler struct {
 	Kube      kubernetes.Interface
 	Gateway   gateway.Interface
+	Dynamic   dynamic.Interface
 	Tailscale tailscale.Interface
 	Scheme    *runtime.Scheme
 	Cfg       *config.Config
@@ -49,6 +62,7 @@ const (
 func NewGatewayReconciler(
 	kube kubernetes.Interface,
 	gw gateway.Interface,
+	dyn dynamic.Interface,
 	ts tailscale.Interface,
 	scheme *runtime.Scheme,
 	cfg *config.Config,
@@ -56,6 +70,7 @@ func NewGatewayReconciler(
 	return &GatewayReconciler{
 		Kube:      kube,
 		Gateway:   gw,
+		Dynamic:   dyn,
 		Scheme:    scheme,
 		Cfg:       cfg,
 		Tailscale: ts,
@@ -224,6 +239,106 @@ func (r *GatewayReconciler) listTCPRoutesForGateway(
 	return trs, nil
 }
 
+// listGRPCRoutesForGateway returns all GRPCRoutes that reference the provided Gateway.
+func (r *GatewayReconciler) listGRPCRoutesForGateway(
+	ctx context.Context,
+	gw *gatewayv1.Gateway,
+) ([]*gatewayv1.GRPCRoute, error) {
+	grList, err := r.Gateway.GatewayV1().
+		GRPCRoutes(metav1.NamespaceAll).
+		List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list GRPCRoutes: %w", err)
+	}
+
+	grs := make([]*gatewayv1.GRPCRoute, 0, len(grList.Items))
+	for i := range grList.Items {
+		route := &grList.Items[i]
+		for _, parentRef := range route.Spec.ParentRefs {
+			gwNs := gatewayv1.Namespace(gw.Namespace)
+			prNs := ptr.Deref(parentRef.Namespace, gwNs)
+			if parentRef.Name == gatewayv1.ObjectName(gw.Name) && prNs == gwNs {
+				grs = append(grs, route)
+				break
+			}
+		}
+	}
+
+	return grs, nil
+}
+
+// listTLSRoutesForGateway returns all TLSRoutes that reference the provided
+// Gateway. TLSRoute is listed through the dynamic client because its served API
+// version varies across gateway-api releases (v1alpha2 vs v1); the unstructured
+// objects are converted to the v1alpha2 typed shape for config building.
+func (r *GatewayReconciler) listTLSRoutesForGateway(
+	ctx context.Context,
+	gw *gatewayv1.Gateway,
+) ([]*gatewayv1alpha2.TLSRoute, error) {
+	list, err := r.Dynamic.Resource(tlsRouteGVR).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list TLSRoutes: %w", err)
+	}
+
+	trs := make([]*gatewayv1alpha2.TLSRoute, 0, len(list.Items))
+	for i := range list.Items {
+		var tr gatewayv1alpha2.TLSRoute
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(
+			list.Items[i].Object, &tr,
+		); err != nil {
+			return nil, fmt.Errorf("failed to convert TLSRoute: %w", err)
+		}
+		for _, parentRef := range tr.Spec.ParentRefs {
+			gwNs := gatewayv1.Namespace(gw.Namespace)
+			prNs := ptr.Deref(parentRef.Namespace, gwNs)
+			if parentRef.Name == gatewayv1.ObjectName(gw.Name) && prNs == gwNs {
+				trs = append(trs, &tr)
+				break
+			}
+		}
+	}
+
+	return trs, nil
+}
+
+// listReferenceGrants returns all ReferenceGrants in the cluster, used to
+// authorize cross-namespace backend references.
+func (r *GatewayReconciler) listReferenceGrants(
+	ctx context.Context,
+) ([]*gatewayv1beta1.ReferenceGrant, error) {
+	rgList, err := r.Gateway.GatewayV1beta1().
+		ReferenceGrants(metav1.NamespaceAll).
+		List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ReferenceGrants: %w", err)
+	}
+
+	grants := make([]*gatewayv1beta1.ReferenceGrant, 0, len(rgList.Items))
+	for i := range rgList.Items {
+		grants = append(grants, &rgList.Items[i])
+	}
+	return grants, nil
+}
+
+// listBackendTLSPolicies returns all BackendTLSPolicies, used to upgrade
+// backend connections to TLS when a policy targets a referenced Service.
+func (r *GatewayReconciler) listBackendTLSPolicies(
+	ctx context.Context,
+) ([]*gatewayv1.BackendTLSPolicy, error) {
+	btpList, err := r.Gateway.GatewayV1().
+		BackendTLSPolicies(metav1.NamespaceAll).
+		List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list BackendTLSPolicies: %w", err)
+	}
+
+	policies := make([]*gatewayv1.BackendTLSPolicy, 0, len(btpList.Items))
+	for i := range btpList.Items {
+		policies = append(policies, &btpList.Items[i])
+	}
+	return policies, nil
+}
+
 // listUDPRoutesForGateway returns all UDPRoutes that reference the provided Gateway.
 func (r *GatewayReconciler) listUDPRoutesForGateway(
 	ctx context.Context,
@@ -262,6 +377,10 @@ func (r *GatewayReconciler) reconcileResources(
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list HTTPRoutes: %w", err)
 	}
+	grs, err := r.listGRPCRoutesForGateway(ctx, gw)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list GRPCRoutes: %w", err)
+	}
 	trs, err := r.listTCPRoutesForGateway(ctx, gw)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list TCPRoutes: %w", err)
@@ -270,12 +389,28 @@ func (r *GatewayReconciler) reconcileResources(
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list UDPRoutes: %w", err)
 	}
+	tlsrs, err := r.listTLSRoutesForGateway(ctx, gw)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list TLSRoutes: %w", err)
+	}
+	grants, err := r.listReferenceGrants(ctx)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list ReferenceGrants: %w", err)
+	}
+	btps, err := r.listBackendTLSPolicies(ctx)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list BackendTLSPolicies: %w", err)
+	}
 
 	cfg, err := tsconfig.NewConfig(
 		gw,
 		tsconfig.WithHTTPRoutes(hrs),
+		tsconfig.WithGRPCRoutes(grs),
 		tsconfig.WithTCPRoutes(trs),
 		tsconfig.WithUDPRoutes(urs),
+		tsconfig.WithTLSRoutes(tlsrs),
+		tsconfig.WithReferenceGrants(grants),
+		tsconfig.WithBackendTLSPolicies(btps),
 	)
 	if err != nil {
 		apiutil.SetGatewayAcceptedCondition(
