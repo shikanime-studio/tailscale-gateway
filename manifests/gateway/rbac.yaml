@@ -9,6 +9,18 @@ rules:
       - gateways/status
       - httproutes
       - httproutes/status
+      - grpcroutes
+      - grpcroutes/status
+      - tcproutes
+      - tcproutes/status
+      - udproutes
+      - udproutes/status
+      - tlsroutes
+      - tlsroutes/status
+      - referencegrants
+      - referencegrants/status
+      - backendtlspolicies
+      - backendtlspolicies/status
     apiGroups:
       - gateway.networking.k8s.io
     verbs:

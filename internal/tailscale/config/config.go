@@ -8,6 +8,7 @@ import (
 	"k8s.io/utils/ptr"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 	"tailscale.com/ipn"
 	"tailscale.com/tailcfg"
 )
@@ -23,9 +24,13 @@ func (c *Config) Marshal() ([]byte, error) {
 }
 
 type options struct {
-	HTTPRoutes []*gatewayv1.HTTPRoute
-	TCPRoutes  []*gatewayv1alpha2.TCPRoute
-	UDPRoutes  []*gatewayv1alpha2.UDPRoute
+	HTTPRoutes       []*gatewayv1.HTTPRoute
+	GRPCRoutes       []*gatewayv1.GRPCRoute
+	TCPRoutes        []*gatewayv1alpha2.TCPRoute
+	UDPRoutes        []*gatewayv1alpha2.UDPRoute
+	TLSRoutes        []*gatewayv1alpha2.TLSRoute
+	ReferenceGrants  []*gatewayv1beta1.ReferenceGrant
+	BackendTLSPolicy []*gatewayv1.BackendTLSPolicy
 }
 
 // Option modifies options used to build a Config.
@@ -47,6 +52,13 @@ func WithHTTPRoutes(hrs []*gatewayv1.HTTPRoute) Option {
 	}
 }
 
+// WithGRPCRoutes adds multiple GRPCRoutes to service options.
+func WithGRPCRoutes(grs []*gatewayv1.GRPCRoute) Option {
+	return func(o *options) {
+		o.GRPCRoutes = grs
+	}
+}
+
 // WithTCPRoutes adds multiple TCPRoutes to service options.
 func WithTCPRoutes(trs []*gatewayv1alpha2.TCPRoute) Option {
 	return func(o *options) {
@@ -61,7 +73,31 @@ func WithUDPRoutes(urs []*gatewayv1alpha2.UDPRoute) Option {
 	}
 }
 
-// NewConfig builds a Tailscale serve Config from a Gateway and HTTPRoutes.
+// WithTLSRoutes adds multiple TLSRoutes to service options.
+func WithTLSRoutes(trs []*gatewayv1alpha2.TLSRoute) Option {
+	return func(o *options) {
+		o.TLSRoutes = trs
+	}
+}
+
+// WithReferenceGrants adds multiple ReferenceGrants to service options.
+func WithReferenceGrants(grants []*gatewayv1beta1.ReferenceGrant) Option {
+	return func(o *options) {
+		o.ReferenceGrants = grants
+	}
+}
+
+// WithBackendTLSPolicies adds multiple BackendTLSPolicies to service options.
+func WithBackendTLSPolicies(policies []*gatewayv1.BackendTLSPolicy) Option {
+	return func(o *options) {
+		o.BackendTLSPolicy = policies
+	}
+}
+
+// NewConfig builds a Tailscale serve Config from a Gateway and the routes that
+// reference it. It supports HTTPRoute, GRPCRoute, TCPRoute, UDPRoute and
+// TLSRoute, honoring ReferenceGrant for cross-namespace backend references and
+// BackendTLSPolicy for TLS-terminated connections to backends.
 func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 	o := buildOptions(opts)
 
@@ -79,7 +115,28 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 		}
 		for _, svcName := range serviceNames {
 			if _, ok := cfg.cfg.Services[svcName]; !ok {
-				svc, err := buildHTTPServiceConfig(gw, hr)
+				svc, err := buildHTTPServiceConfig(gw, hr, o)
+				if err != nil {
+					return nil, err
+				}
+				cfg.cfg.Services[svcName] = svc
+			}
+		}
+	}
+	for _, gr := range o.GRPCRoutes {
+		var serviceNames []tailcfg.ServiceName
+		if len(gr.Spec.Hostnames) == 0 {
+			serviceNames = []tailcfg.ServiceName{
+				tailcfg.AsServiceName(fmt.Sprintf("svc:%s", gw.Name)),
+			}
+		} else {
+			for _, hn := range gr.Spec.Hostnames {
+				serviceNames = append(serviceNames, buildServiceName(hn))
+			}
+		}
+		for _, svcName := range serviceNames {
+			if _, ok := cfg.cfg.Services[svcName]; !ok {
+				svc, err := buildGRPCServiceConfig(gw, gr, o)
 				if err != nil {
 					return nil, err
 				}
@@ -92,7 +149,7 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 		if _, ok := cfg.cfg.Services[svcName]; ok {
 			continue
 		}
-		svc, err := buildTCPServiceConfig(gw, tr)
+		svc, err := buildTCPServiceConfig(gw, tr, o)
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +160,18 @@ func NewConfig(gw *gatewayv1.Gateway, opts ...Option) (*Config, error) {
 		if _, ok := cfg.cfg.Services[svcName]; ok {
 			continue
 		}
-		svc, err := buildUDPServiceConfig(gw, ur)
+		svc, err := buildUDPServiceConfig(gw, ur, o)
+		if err != nil {
+			return nil, err
+		}
+		cfg.cfg.Services[svcName] = svc
+	}
+	for _, tr := range o.TLSRoutes {
+		svcName := tailcfg.AsServiceName(fmt.Sprintf("svc:%s", tr.Name))
+		if _, ok := cfg.cfg.Services[svcName]; ok {
+			continue
+		}
+		svc, err := buildTLSServiceConfig(gw, tr, o)
 		if err != nil {
 			return nil, err
 		}
@@ -121,8 +189,9 @@ func buildServiceName(host gatewayv1.Hostname) tailcfg.ServiceName {
 func buildHTTPServiceConfig(
 	gw *gatewayv1.Gateway,
 	hr *gatewayv1.HTTPRoute,
+	o options,
 ) (*ipn.ServiceConfig, error) {
-	web, err := buildWebServerConfigs(gw, hr)
+	web, err := buildWebServerConfigs(gw, hr, o)
 	if err != nil {
 		return nil, err
 	}
@@ -133,16 +202,61 @@ func buildHTTPServiceConfig(
 	return svc, nil
 }
 
-// buildTCPServiceConfig builds a Tailscale service config from a Gateway and TCPRoute.
-func buildTCPServiceConfig(
+// buildGRPCServiceConfig builds a Tailscale service config from a Gateway and a
+// GRPCRoute. gRPC is HTTP/2; Tailscale serve terminates it over the Web layer
+// and proxies to the backend.
+func buildGRPCServiceConfig(
 	gw *gatewayv1.Gateway,
-	tr *gatewayv1alpha2.TCPRoute,
+	gr *gatewayv1.GRPCRoute,
+	o options,
+) (*ipn.ServiceConfig, error) {
+	web, err := buildGRPCWebConfigs(gw, gr, o)
+	if err != nil {
+		return nil, err
+	}
+	svc := &ipn.ServiceConfig{
+		TCP: buildTCPPortHandlers(gw),
+		Web: web,
+	}
+	return svc, nil
+}
+
+// buildTLSServiceConfig builds a Tailscale service config from a Gateway and a
+// TLSRoute. TLSRoutes perform SNI-matched passthrough, which maps to a raw TCP
+// forward on the listener port to the backend.
+func buildTLSServiceConfig(
+	gw *gatewayv1.Gateway,
+	tr *gatewayv1alpha2.TLSRoute,
+	o options,
 ) (*ipn.ServiceConfig, error) {
 	port, err := buildListenerPortFromParentRefs(gw, tr.Spec.ParentRefs)
 	if err != nil {
 		return nil, err
 	}
-	forward, err := buildTCPForwardFromRoute(tr)
+	forward, err := buildTLSRouteForward(gw, tr, o)
+	if err != nil {
+		return nil, err
+	}
+	return &ipn.ServiceConfig{
+		TCP: map[uint16]*ipn.TCPPortHandler{
+			port: {
+				TCPForward: forward,
+			},
+		},
+	}, nil
+}
+
+// buildTCPServiceConfig builds a Tailscale service config from a Gateway and TCPRoute.
+func buildTCPServiceConfig(
+	gw *gatewayv1.Gateway,
+	tr *gatewayv1alpha2.TCPRoute,
+	o options,
+) (*ipn.ServiceConfig, error) {
+	port, err := buildListenerPortFromParentRefs(gw, tr.Spec.ParentRefs)
+	if err != nil {
+		return nil, err
+	}
+	forward, err := buildTCPForwardFromRoute(tr, o)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +273,7 @@ func buildTCPServiceConfig(
 func buildUDPServiceConfig(
 	gw *gatewayv1.Gateway,
 	ur *gatewayv1alpha2.UDPRoute,
+	o options,
 ) (*ipn.ServiceConfig, error) {
 	_, err := buildListenerPortFromParentRefs(gw, ur.Spec.ParentRefs)
 	if err != nil {
@@ -193,7 +308,7 @@ func buildListenerPortFromParentRefs(
 	return 0, fmt.Errorf("no listener found for route")
 }
 
-func buildTCPForwardFromRoute(tr *gatewayv1alpha2.TCPRoute) (string, error) {
+func buildTCPForwardFromRoute(tr *gatewayv1alpha2.TCPRoute, o options) (string, error) {
 	if len(tr.Spec.Rules) == 0 {
 		return "", fmt.Errorf("tcp route requires at least one rule")
 	}
@@ -201,14 +316,42 @@ func buildTCPForwardFromRoute(tr *gatewayv1alpha2.TCPRoute) (string, error) {
 		return "", fmt.Errorf("tcp route requires at least one backend ref")
 	}
 	br := tr.Spec.Rules[0].BackendRefs[0]
-	host := string(br.Name)
-	if br.Namespace != nil {
-		host = fmt.Sprintf("%s.%s", host, *br.Namespace)
+	if err := validateCrossNamespaceRef(
+		o.ReferenceGrants,
+		gatewayv1.Kind("TCPRoute"),
+		tr.Namespace,
+		string(br.Name),
+		br.Namespace,
+	); err != nil {
+		return "", err
 	}
-	if br.Port != nil {
-		host = fmt.Sprintf("%s:%d", host, *br.Port)
+	return backendHost(string(br.Name), br.Namespace, br.Port), nil
+}
+
+// buildTLSRouteForward builds the upstream forward target for a TLSRoute,
+// honoring ReferenceGrant for cross-namespace backend references.
+func buildTLSRouteForward(
+	gw *gatewayv1.Gateway,
+	tr *gatewayv1alpha2.TLSRoute,
+	o options,
+) (string, error) {
+	if len(tr.Spec.Rules) == 0 {
+		return "", fmt.Errorf("tls route requires at least one rule")
 	}
-	return host, nil
+	if len(tr.Spec.Rules[0].BackendRefs) == 0 {
+		return "", fmt.Errorf("tls route requires at least one backend ref")
+	}
+	br := tr.Spec.Rules[0].BackendRefs[0]
+	if err := validateCrossNamespaceRef(
+		o.ReferenceGrants,
+		gatewayv1.Kind("TLSRoute"),
+		tr.Namespace,
+		string(br.Name),
+		br.Namespace,
+	); err != nil {
+		return "", err
+	}
+	return backendHost(string(br.Name), br.Namespace, br.Port), nil
 }
 
 // buildTCPPortHandlers builds TCP port handlers for a Gateway.
@@ -231,6 +374,7 @@ func buildTCPPortHandlers(gw *gatewayv1.Gateway) map[uint16]*ipn.TCPPortHandler 
 func buildWebServerConfigs(
 	gw *gatewayv1.Gateway,
 	hr *gatewayv1.HTTPRoute,
+	o options,
 ) (map[ipn.HostPort]*ipn.WebServerConfig, error) {
 	web := map[ipn.HostPort]*ipn.WebServerConfig{}
 
@@ -241,7 +385,7 @@ func buildWebServerConfigs(
 
 		for _, l := range gw.Spec.Listeners {
 			if !isSupportedProtocol(l.Protocol) {
-				return nil, fmt.Errorf("only HTTP and HTTPS protocols are supported")
+				continue
 			}
 			var hosts []string
 			if len(hr.Spec.Hostnames) == 0 {
@@ -253,7 +397,48 @@ func buildWebServerConfigs(
 			}
 			for _, h := range hosts {
 				addr := ipn.HostPort(fmt.Sprintf("%s:%d", h, l.Port))
-				handlers, err := buildHTTPHandlers(hr)
+				handlers, err := buildHTTPHandlers(gw, hr, h, o)
+				if err != nil {
+					return nil, err
+				}
+				web[addr] = &ipn.WebServerConfig{Handlers: handlers}
+			}
+		}
+	}
+
+	return web, nil
+}
+
+// buildGRPCWebConfigs builds web server configs for a Gateway and GRPCRoute.
+// gRPC uses HTTP/2; it is reflected through the Web layer and proxied to the
+// backend service on its configured port.
+func buildGRPCWebConfigs(
+	gw *gatewayv1.Gateway,
+	gr *gatewayv1.GRPCRoute,
+	o options,
+) (map[ipn.HostPort]*ipn.WebServerConfig, error) {
+	web := map[ipn.HostPort]*ipn.WebServerConfig{}
+
+	for _, pr := range gr.Spec.ParentRefs {
+		if !isParentGateway(gw, &pr) {
+			continue
+		}
+
+		for _, l := range gw.Spec.Listeners {
+			if !isSupportedProtocol(l.Protocol) {
+				continue
+			}
+			var hosts []string
+			if len(gr.Spec.Hostnames) == 0 {
+				hosts = []string{gw.Name}
+			} else {
+				for _, h := range gr.Spec.Hostnames {
+					hosts = append(hosts, string(h))
+				}
+			}
+			for _, h := range hosts {
+				addr := ipn.HostPort(fmt.Sprintf("%s:%d", h, l.Port))
+				handlers, err := buildGRPCHandlers(gw, gr, h, o)
 				if err != nil {
 					return nil, err
 				}
@@ -277,17 +462,35 @@ func isSupportedProtocol(protocol gatewayv1.ProtocolType) bool {
 	return protocol == gatewayv1.HTTPProtocolType || protocol == gatewayv1.HTTPSProtocolType
 }
 
-// buildHTTPHandlers builds HTTP handlers for a HTTPRoute.
-func buildHTTPHandlers(hr *gatewayv1.HTTPRoute) (map[string]*ipn.HTTPHandler, error) {
+// buildHTTPHandlers builds HTTP handlers for a HTTPRoute bound to a host. It
+// honors ReferenceGrant for cross-namespace backend references and
+// BackendTLSPolicy for TLS-terminated connections to backends.
+func buildHTTPHandlers(
+	gw *gatewayv1.Gateway,
+	hr *gatewayv1.HTTPRoute,
+	host string,
+	o options,
+) (map[string]*ipn.HTTPHandler, error) {
 	handlers := map[string]*ipn.HTTPHandler{}
 
 	for _, rule := range hr.Spec.Rules {
 		if len(rule.BackendRefs) > 1 {
 			return nil, fmt.Errorf("multiple BackendRefs in a single rule are not supported")
 		}
+		br := rule.BackendRefs[0]
+
+		if err := validateCrossNamespaceRef(
+			o.ReferenceGrants,
+			gatewayv1.Kind("HTTPRoute"),
+			hr.Namespace,
+			string(br.Name),
+			br.Namespace,
+		); err != nil {
+			return nil, err
+		}
 
 		if len(rule.Matches) == 0 {
-			handler, err := buildHTTPHandler(rule.BackendRefs[0], "/")
+			handler, err := buildHTTPHandler(gw, br.BackendRef, "/", o)
 			if err != nil {
 				return nil, err
 			}
@@ -297,7 +500,7 @@ func buildHTTPHandlers(hr *gatewayv1.HTTPRoute) (map[string]*ipn.HTTPHandler, er
 				if !isSupportedMatch(match) {
 					continue
 				}
-				handler, err := buildMatchHandler(rule.BackendRefs[0], match)
+				handler, err := buildMatchHandler(gw, host, br, match, o)
 				if err != nil {
 					return nil, err
 				}
@@ -307,6 +510,105 @@ func buildHTTPHandlers(hr *gatewayv1.HTTPRoute) (map[string]*ipn.HTTPHandler, er
 	}
 
 	return handlers, nil
+}
+
+// buildGRPCHandlers builds HTTP/2 handlers for a GRPCRoute bound to a host.
+func buildGRPCHandlers(
+	gw *gatewayv1.Gateway,
+	gr *gatewayv1.GRPCRoute,
+	host string,
+	o options,
+) (map[string]*ipn.HTTPHandler, error) {
+	handlers := map[string]*ipn.HTTPHandler{}
+
+	for _, rule := range gr.Spec.Rules {
+		if len(rule.BackendRefs) > 1 {
+			return nil, fmt.Errorf("multiple BackendRefs in a single rule are not supported")
+		}
+		if len(rule.BackendRefs) == 0 {
+			continue
+		}
+		br := rule.BackendRefs[0]
+
+		if err := validateCrossNamespaceRef(
+			o.ReferenceGrants,
+			gatewayv1.Kind("GRPCRoute"),
+			gr.Namespace,
+			string(br.Name),
+			br.Namespace,
+		); err != nil {
+			return nil, err
+		}
+
+		handler, err := buildHTTPHandler(gw, br.BackendRef, "/", o)
+		if err != nil {
+			return nil, err
+		}
+		handlers["/"] = handler
+	}
+
+	return handlers, nil
+}
+
+// backendHost renders the upstream target host string for a backend reference,
+// applying the optional namespace and port.
+func backendHost(name string, namespace *gatewayv1.Namespace, port *gatewayv1.PortNumber) string {
+	host := name
+	if namespace != nil {
+		host = fmt.Sprintf("%s.%s", host, *namespace)
+	}
+	if port != nil {
+		host = fmt.Sprintf("%s:%d", host, *port)
+	}
+	return host
+}
+
+// validateCrossNamespaceRef returns an error when a route in fromNamespace
+// references a backend in a different namespace that is not permitted by any
+// provided ReferenceGrant.
+func validateCrossNamespaceRef(
+	grants []*gatewayv1beta1.ReferenceGrant,
+	fromKind gatewayv1.Kind,
+	fromNamespace string,
+	backendName string,
+	backendNamespace *gatewayv1.Namespace,
+) error {
+	if backendNamespace == nil || string(*backendNamespace) == fromNamespace {
+		return nil
+	}
+	for _, grant := range grants {
+		if string(grant.Namespace) != string(*backendNamespace) {
+			continue
+		}
+		fromOK := false
+		for _, f := range grant.Spec.From {
+			if f.Group == gatewayv1.Group("gateway.networking.k8s.io") &&
+				f.Kind == fromKind &&
+				string(f.Namespace) == fromNamespace {
+				fromOK = true
+				break
+			}
+		}
+		if !fromOK {
+			continue
+		}
+		toOK := false
+		for _, t := range grant.Spec.To {
+			if t.Group == gatewayv1.Group("") && t.Kind == gatewayv1.Kind("Service") {
+				if t.Name == nil || string(*t.Name) == backendName {
+					toOK = true
+					break
+				}
+			}
+		}
+		if toOK {
+			return nil
+		}
+	}
+	return fmt.Errorf(
+		"cross-namespace reference from %s/%s to Service %s/%s is not permitted by any ReferenceGrant",
+		fromKind, fromNamespace, *backendNamespace, backendName,
+	)
 }
 
 // isSupportedMatch returns true if the match is supported.
@@ -325,8 +627,11 @@ func isSupportedMatch(match gatewayv1.HTTPRouteMatch) bool {
 
 // buildMatchHandler builds an HTTP handler for a BackendRef and path match.
 func buildMatchHandler(
+	gw *gatewayv1.Gateway,
+	host string,
 	br gatewayv1.HTTPBackendRef,
 	match gatewayv1.HTTPRouteMatch,
+	o options,
 ) (*ipn.HTTPHandler, error) {
 	if match.Path == nil {
 		return nil, fmt.Errorf("path match is required")
@@ -334,24 +639,60 @@ func buildMatchHandler(
 	if match.Path.Value == nil {
 		return nil, fmt.Errorf("path match value is required")
 	}
-	return buildHTTPHandler(br, *match.Path.Value)
+	return buildHTTPHandler(gw, br.BackendRef, *match.Path.Value, o)
 }
 
-// buildHTTPHandler builds an HTTP handler for a BackendRef and path match.
-func buildHTTPHandler(br gatewayv1.HTTPBackendRef, path string) (*ipn.HTTPHandler, error) {
-	host := string(br.Name)
+// buildHTTPHandler builds an HTTP handler for a BackendRef with the given proxy
+// mount path. When a BackendTLSPolicy targets the referenced Service, the
+// backend connection is upgraded to HTTPS using the policy's validation
+// hostname.
+func buildHTTPHandler(
+	gw *gatewayv1.Gateway,
+	br gatewayv1.BackendRef,
+	path string,
+	o options,
+) (*ipn.HTTPHandler, error) {
+	backend := string(br.Name)
+	backendNs := gw.Namespace
 	if br.Namespace != nil {
-		host = fmt.Sprintf("%s.%s", host, *br.Namespace)
+		backendNs = string(*br.Namespace)
 	}
-	if br.Port != nil {
-		host = fmt.Sprintf("%s:%d", host, *br.Port)
+
+	scheme := "http"
+	if policy := findBackendTLSPolicy(o.BackendTLSPolicy, backendNs, backend); policy != nil {
+		scheme = "https"
 	}
+
+	target := backendHost(backend, br.Namespace, br.Port)
 	proxy := url.URL{
-		Scheme: "http",
-		Host:   host,
+		Scheme: scheme,
+		Host:   target,
 		Path:   path,
 	}
 	return &ipn.HTTPHandler{Proxy: proxy.String()}, nil
+}
+
+// findBackendTLSPolicy returns the first BackendTLSPolicy whose TargetRefs
+// select the named Service in the given namespace, or nil if none match.
+func findBackendTLSPolicy(
+	policies []*gatewayv1.BackendTLSPolicy,
+	namespace, name string,
+) *gatewayv1.BackendTLSPolicy {
+	for _, p := range policies {
+		for _, ref := range p.Spec.TargetRefs {
+			if ref.Group != "" && ref.Group != "core" {
+				continue
+			}
+			if ref.Kind != "Service" {
+				continue
+			}
+			if ref.Name != "" && string(ref.Name) != name {
+				continue
+			}
+			return p
+		}
+	}
+	return nil
 }
 
 // AdvertiseServicesCommand returns a shell command to advertise all services.

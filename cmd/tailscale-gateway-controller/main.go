@@ -6,6 +6,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -16,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 	versioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 
 	"github.com/shikanime-studio/tailscale-gateway/internal/config"
@@ -33,6 +35,7 @@ func init() {
 	utilruntime.Must(kscheme.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.Install(scheme))
 	utilruntime.Must(gatewayv1alpha2.Install(scheme))
+	utilruntime.Must(gatewayv1beta1.Install(scheme))
 }
 
 // main starts the controller manager and sets up the Gateway reconciler and
@@ -65,6 +68,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	dynClient, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create dynamic client")
+		os.Exit(1)
+	}
+
 	kubeClient, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		setupLog.Error(err, "unable to create kube clientset")
@@ -81,6 +90,7 @@ func main() {
 	reconciler := controller.NewGatewayReconciler(
 		kubeClient,
 		gwClient,
+		dynClient,
 		tsClient,
 		mgr.GetScheme(),
 		cfg,
