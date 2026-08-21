@@ -9,6 +9,14 @@ rules:
       - gateways/status
       - httproutes
       - httproutes/status
+      - tcproutes
+      - tcproutes/status
+      - udproutes
+      - udproutes/status
+      - grpcroutes
+      - grpcroutes/status
+      - tlsroutes
+      - tlsroutes/status
     apiGroups:
       - gateway.networking.k8s.io
     verbs:

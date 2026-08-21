@@ -241,7 +241,7 @@ func buildWebServerConfigs(
 
 		for _, l := range gw.Spec.Listeners {
 			if !isSupportedProtocol(l.Protocol) {
-				return nil, fmt.Errorf("only HTTP and HTTPS protocols are supported")
+				continue
 			}
 			var hosts []string
 			if len(hr.Spec.Hostnames) == 0 {
