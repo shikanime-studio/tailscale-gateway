@@ -9,7 +9,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	dfake "k8s.io/client-go/dynamic/fake"
 	kfake "k8s.io/client-go/kubernetes/fake"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/ptr"
@@ -206,7 +208,10 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 			}
 
 			tsClient := tstesting.New(rand.NewSource(42))
-			r := NewGatewayReconciler(kubeClient, gwClient, tsClient, s, cfg)
+			dynClient := dfake.NewSimpleDynamicClientWithCustomListKinds(s, map[schema.GroupVersionResource]string{
+				tlsRouteGVR: "TLSRouteList",
+			})
+			r := NewGatewayReconciler(kubeClient, gwClient, dynClient, tsClient, s, cfg)
 
 			// Test reconciliation
 			req := reconcile.Request{
