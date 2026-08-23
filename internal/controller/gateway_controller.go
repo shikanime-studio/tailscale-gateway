@@ -275,7 +275,9 @@ func (r *GatewayReconciler) listTLSRoutesForGateway(
 	ctx context.Context,
 	gw *gatewayv1.Gateway,
 ) ([]*gatewayv1alpha2.TLSRoute, error) {
-	list, err := r.Dynamic.Resource(tlsRouteGVR).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	list, err := r.Dynamic.Resource(tlsRouteGVR).
+		Namespace(metav1.NamespaceAll).
+		List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list TLSRoutes: %w", err)
 	}

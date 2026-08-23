@@ -417,9 +417,15 @@ func buildWebServerConfigs(
 	hr *gatewayv1.HTTPRoute,
 	o options,
 ) (map[ipn.HostPort]*ipn.WebServerConfig, error) {
-	return buildWebConfigsForRoute(gw, hr.Spec.ParentRefs, hr.Spec.Hostnames, func(host string, opts options) (map[string]*ipn.HTTPHandler, error) {
-		return buildHTTPHandlers(gw, hr, host, opts)
-	}, o)
+	return buildWebConfigsForRoute(
+		gw,
+		hr.Spec.ParentRefs,
+		hr.Spec.Hostnames,
+		func(host string, opts options) (map[string]*ipn.HTTPHandler, error) {
+			return buildHTTPHandlers(gw, hr, host, opts)
+		},
+		o,
+	)
 }
 
 // buildGRPCWebConfigs builds web server configs for a Gateway and GRPCRoute.
@@ -430,9 +436,15 @@ func buildGRPCWebConfigs(
 	gr *gatewayv1.GRPCRoute,
 	o options,
 ) (map[ipn.HostPort]*ipn.WebServerConfig, error) {
-	return buildWebConfigsForRoute(gw, gr.Spec.ParentRefs, gr.Spec.Hostnames, func(host string, opts options) (map[string]*ipn.HTTPHandler, error) {
-		return buildGRPCHandlers(gw, gr, host, opts)
-	}, o)
+	return buildWebConfigsForRoute(
+		gw,
+		gr.Spec.ParentRefs,
+		gr.Spec.Hostnames,
+		func(host string, opts options) (map[string]*ipn.HTTPHandler, error) {
+			return buildGRPCHandlers(gw, gr, host, opts)
+		},
+		o,
+	)
 }
 
 // isParentGateway returns true if the parent reference is the gateway.
@@ -592,7 +604,10 @@ func validateCrossNamespaceRef(
 	}
 	return fmt.Errorf(
 		"cross-namespace reference from %s/%s to Service %s/%s is not permitted by any ReferenceGrant",
-		fromKind, fromNamespace, *backendNamespace, backendName,
+		fromKind,
+		fromNamespace,
+		*backendNamespace,
+		backendName,
 	)
 }
 

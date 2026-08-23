@@ -208,9 +208,12 @@ func TestGatewayReconciler_Reconcile(t *testing.T) {
 			}
 
 			tsClient := tstesting.New(rand.NewSource(42))
-			dynClient := dfake.NewSimpleDynamicClientWithCustomListKinds(s, map[schema.GroupVersionResource]string{
-				tlsRouteGVR: "TLSRouteList",
-			})
+			dynClient := dfake.NewSimpleDynamicClientWithCustomListKinds(
+				s,
+				map[schema.GroupVersionResource]string{
+					tlsRouteGVR: "TLSRouteList",
+				},
+			)
 			r := NewGatewayReconciler(kubeClient, gwClient, dynClient, tsClient, s, cfg)
 
 			// Test reconciliation
